@@ -1,0 +1,9 @@
+torch>=2.2
+numpy
+pandas>=2.0
+scikit-learn
+pyarrow
+fastapi
+uvicorn[standard]
+h5py
+tqdm

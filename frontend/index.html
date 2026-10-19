@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StepLens</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-name">StepLens</span>
+    <span class="brand-sub">where and why error-detection models fail on CaptainCook4D</span>
+  </div>
+  <div class="status"><span id="status">loading…</span>
+    <label class="theme">theme <select id="theme"><option value="">auto</option><option value="light">light</option><option value="dark">dark</option></select></label></div>
+</header>
+
+<section class="controls" aria-label="Filters and model settings">
+  <label>Model A <select id="modelA"></select></label>
+  <label>Compare with <select id="modelB"><option value="">none</option></select></label>
+  <label>Phase <select id="phase">
+    <option value="test" selected>test</option><option value="val">val</option><option value="train">train</option><option value="all">all</option>
+  </select></label>
+  <label class="check"><input type="checkbox" id="norm"> official min-max normalization</label>
+  <label>Operating point <select id="opRule" title="How each model's decision threshold is chosen">
+    <option value="balanced" selected>balanced on val (max TPR − FPR)</option>
+    <option value="f1">best F1 on val</option>
+    <option value="paper">paper protocol (normalized, 0.6 step / 0.4 others)</option>
+    <option value="custom">custom (one threshold for all models)</option>
+  </select></label>
+  <label>Threshold (A) <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.5"> <output id="thresholdOut">0.50</output></label>
+  <span class="sep"></span>
+  <label>Recipe <select id="fActivity"><option value="">all</option></select></label>
+  <label>Person <select id="fPerson"><option value="">all</option></select></label>
+  <label>Kitchen <select id="fEnvironment"><option value="">all</option></select></label>
+  <label>Category <select id="fCategory"><option value="">all</option></select></label>
+  <label>Duration <select id="fDuration"><option value="">all</option></select></label>
+  <label>Position <select id="fPosition"><option value="">all</option></select></label>
+  <button id="reset" type="button">Reset filters</button>
+</section>
+<div id="chips" class="chips" aria-live="polite"></div>
+<div id="summary" class="summary"></div>
+
+<main class="grid">
+  <section class="card" id="card-matrix">
+    <div class="card-head"><h2>Miss rate by error category × model</h2>
+      <p class="hint">Cell = share of that category's error steps the model misses at the current threshold. Last row = false-alarm rate on normal steps. Click a cell to focus a category and model.</p></div>
+    <div id="matrix" class="table-wrap"></div>
+    <div id="compare" class="compare"></div>
+  </section>
+
+  <section class="card" id="card-slices">
+    <div class="card-head"><h2>Slices with the most missed errors</h2>
+      <p class="hint">Metadata subgroups (recipe, person, kitchen, step duration, position in recipe, optionally × category), ranked by miss rate above the model's overall rate. Click a row to apply it as a filter.</p>
+      <div class="inline-controls">
+        <label>min error steps <input type="number" id="minSize" min="3" max="500" step="1" value="10"></label>
+        <label>sort <select id="sliceSort">
+          <option value="z_miss">misses, most significant first</option>
+          <option value="miss_lift">misses, largest gap vs overall</option>
+          <option value="z_fa">false alarms, most significant first</option>
+          <option value="n_error">largest slices</option>
+        </select></label>
+        <label class="check"><input type="checkbox" id="sliceCats" checked> cross with category</label>
+      </div>
+    </div>
+    <div id="slices" class="table-wrap"></div>
+  </section>
+
+  <section class="card" id="card-graph">
+    <div class="card-head"><h2 id="graphTitle">Recipes by miss rate</h2>
+      <p class="hint" id="graphHint">Pick a recipe to see its task graph with each step colored by how often the model misses errors there.</p>
+      <div class="inline-controls"><button id="graphBack" type="button" class="ghost" hidden>← all recipes</button>
+        <label class="check"><input type="checkbox" id="graphTable"> table view</label></div>
+    </div>
+    <div id="graph"></div>
+  </section>
+
+  <section class="card" id="card-timeline">
+    <div class="card-head"><h2>Recording timeline</h2>
+      <p class="hint">Ground-truth steps (colored by error category) above the models' per-second error scores. Click a step to inspect it and jump the video.</p>
+      <div class="inline-controls"><label>Recording <select id="recording"></select></label></div>
+    </div>
+    <div id="timeline"></div>
+    <div class="timeline-bottom">
+      <div id="stepDetail" class="detail"></div>
+      <div id="videoBox" class="video"></div>
+    </div>
+  </section>
+</main>
+
+<div id="tooltip" class="tooltip" role="status" hidden></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+.venv/
+data/features/
+data/videos/
+data/predictions/
+data/server.log
+vendor/
+__pycache__/
+*.pyc
+.DS_Store
