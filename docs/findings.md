@@ -132,6 +132,41 @@ At its balanced operating point (threshold 0.07 on the mean per-second score):
 * **No consistent effect** of step duration (transformer flat at 9–19%; MLP 12–37% with
   no monotone trend) or of quantity-worded errors (tsp/tbsp/cup: 25% vs 26% missed).
 
+### 3b′. Slice discovery on the random step split (found on val, confirmed on test)
+
+Because the official "val" and "test" phases are different populations, the proposal
+says slice discovery and confirmation should use the seeded random step split. For the
+tuned Omnivore MLP on that split (balanced threshold 0.06; overall miss 38% on val, 35%
+on test), the slices found on the validation steps and confirmed on the test steps are:
+
+| Slice (found on val) | val miss (n) | z | test miss (n) | confirmed |
+| --- | --- | --- | --- | --- |
+| kitchen 5 | 53% (47) | 2.1 | 53% (43) | ✓ |
+| kitchen 5 & step < 15 s | 82% (11) | 3.0 | 67% (6) | ✓ |
+| kitchen 5 & Order errors | 64% (14) | 2.0 | 50% (18) | ✓ |
+| last quarter of the recipe (Q4) | 52% (58) | 2.1 | 42% (57) | ✓ |
+| Q2 & Technique errors | 67% (15) | 2.3 | 39% (23) | ✓ |
+| step 60–120 s & Preparation errors | 75% (12) | 2.6 | 25% (4) | ✗ |
+| step < 15 s & Technique errors | 69% (16) | 2.5 | 29% (17) | ✗ |
+
+So on the random split the confirmed kitchen is kitchen 5, not kitchen 2 (kitchen 5 also
+has the lowest per-kitchen AUC for this model, 0.72), and the recipe-position effect
+(Q4) is confirmed. Half of the val-only slices evaporate on test, which is exactly what
+the confirmation column is for. Person 2 is not in this model's top-10 by z because it
+has only 16 test errors, but its miss rate is 62% [38–81] against 35% overall.
+
+**Bootstrap 95% intervals (500 resamples over error steps) for the headline numbers:**
+
+| Model (test) | Overall missed | Person 2 missed | Kitchen 2 missed |
+| --- | --- | --- | --- |
+| Omnivore MLP lr 1e-4, official step split | 26% [21–32] | 69% [44–88] | 60% [47–73] |
+| Omnivore transformer lr 1e-5, official step split | 12% [9–16] | 38% [12–62] | 23% [11–32] |
+| Omnivore transformer, recording split (held out) | 26% [20–31] | 61% [39–83] | 28% [16–41] |
+| Omnivore MLP lr 1e-4, random step split | 35% [29–40] | 62% [38–81] | 30% [19–42] |
+
+Person 2's interval excludes the overall rate for every model; kitchen 2's does so only
+for the first model.
+
 ### 3c. Seed robustness (Oct 18, `seeds.md`)
 
 Three seeds of each key MLP recipe, test phase, balanced points:

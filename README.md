@@ -99,7 +99,7 @@ Extra options: `--lr`, `--tag` (suffix for the model id), `--center recording`
 .venv/bin/python -m unittest discover -s tests # metric and slice-discovery tests
 ```
 
-Documents: `docs/findings.md` (findings log), `docs/case_studies.md` (walkthroughs with
+Documents: `proposal/Team17.pdf` (the submitted proposal), `docs/findings.md` (findings log), `docs/case_studies.md` (walkthroughs with
 video), `docs/results.md` (all models), `docs/seeds.md` (seed robustness), `docs/report.md`
 (report draft), `docs/slides_outline.md`, `docs/user_study/` (protocol, task sheet, SUS,
 consent, reference findings, baseline notebook + CSVs; designed, not run).
