@@ -46,7 +46,12 @@
 <main class="grid">
   <section class="card" id="card-matrix">
     <div class="card-head"><h2>Miss rate by error category × model</h2>
-      <p class="hint">Cell = share of that category's error steps the model misses at the current threshold. Last row = false-alarm rate on normal steps. Click a cell to focus a category and model.</p></div>
+      <p class="hint">Cell = share of that category's error steps the model misses at the current threshold. Last row = false-alarm rate on normal steps. Click a cell to focus a category and model.
+        The model makes one error/normal decision per step, so a step with several error categories counts in every row it belongs to and is caught or missed in all of them at once; rows overlap and do not add up to the number of error steps.</p>
+      <div class="inline-controls"><label>Steps with several categories <select id="multiLabel">
+        <option value="all" selected>count in every category they carry</option>
+        <option value="single">exclude (single-category steps only)</option>
+      </select></label></div></div>
     <div id="matrix" class="table-wrap"></div>
     <div id="compare" class="compare"></div>
   </section>

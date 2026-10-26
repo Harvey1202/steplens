@@ -90,16 +90,29 @@ Extra options: `--lr`, `--tag` (suffix for the model id), `--center recording`
 (subtract each recording's mean feature), `--upweight technique temperature --upweight_factor 2`
 (loss weight for error steps of those categories).
 
+## The authors' checkpoints
+
+The authors released the checkpoints used in the paper (error_recognition issue #1). To
+score every step with one of them and show it in the tool next to our models:
+
+```bash
+# download e.g. Transformer/omnivore/error_recognition_Transformer_omnivore_step_epoch_9.pt
+# from https://utdallas.app.box.com/s/uz3s1alrzucz03sleify8kazhuc1ksl3 into data/paper_checkpoints/
+.venv/bin/python -m steplens.evaluate_checkpoint data/paper_checkpoints/Transformer_omnivore_step.pt \
+    --backbone omnivore --variant transformer --split step --epoch 9
+```
+
 ## Findings-guided fixes and reports
 
 ```bash
 .venv/bin/python -m steplens.calibrate --model omnivore_mlp_video_step_lr1e-4 --by environment_id
     # per-kitchen thresholds tuned on val, evaluated on test; writes <model>_cal-environment/ as a derived model
 .venv/bin/python scripts/results_table.py      # docs/results.md: every model vs the paper's numbers
+.venv/bin/python scripts/slice_survival.py     # docs/slice_survival.md: how often flagged slices survive on test
 .venv/bin/python -m unittest discover -s tests # metric and slice-discovery tests
 ```
 
-Documents: `proposal/Team17.pdf` (the submitted proposal), `docs/findings.md` (findings log), `docs/case_studies.md` (walkthroughs with
+Documents: `proposal/Team17.pdf` (the submitted proposal), `docs/feedback_response.md` (response to the proposal feedback, with evidence), `docs/findings.md` (findings log), `docs/case_studies.md` (walkthroughs with
 video), `docs/results.md` (all models), `docs/seeds.md` (seed robustness), `docs/report.md`
 (report draft), `docs/slides_outline.md`, `docs/user_study/` (protocol, task sheet, SUS,
 consent, reference findings, baseline notebook + CSVs; designed, not run).

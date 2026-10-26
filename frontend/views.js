@@ -84,7 +84,10 @@ export function renderMatrix() {
   thead.appendChild(hr); table.appendChild(thead);
   const tbody = el('tbody');
 
-  const rows = keys.map((k, i) => ({ key: k, name: names[i], color: catColor(k), pick: (d) => d.s[`err_${k}`], missRate: true }));
+  const SCORED = ['preparation', 'measurement', 'order', 'timing', 'technique', 'temperature'];
+  const nCats = (s) => SCORED.reduce((n, c) => n + (s[`err_${c}`] ? 1 : 0), 0);
+  const inRow = (s, k) => s[`err_${k}`] && (state.multiLabel === 'all' || nCats(s) <= 1);
+  const rows = keys.map((k, i) => ({ key: k, name: names[i], color: catColor(k), pick: (d) => inRow(d.s, k), missRate: true }));
   rows.push({ key: 'normal', name: 'Normal steps (false-alarm rate)', color: cssVar('--normal-fill'), pick: (d) => !d.s.has_errors, missRate: false });
 
   for (const r of rows) {
@@ -93,7 +96,7 @@ export function renderMatrix() {
     const dot = el('span', { class: 'dot' }); dot.style.background = r.color;
     td.append(dot, document.createTextNode(r.name));
     tr.appendChild(td);
-    const total = state.steps.filter((s) => (r.key === 'normal' ? !s.has_errors : s[`err_${r.key}`])).length;
+    const total = state.steps.filter((s) => (r.key === 'normal' ? !s.has_errors : inRow(s, r.key))).length;
     tr.appendChild(el('td', { class: 'num' }, String(total)));
     for (const { m, items } of perModel) {
       const sub = items.filter(r.pick);

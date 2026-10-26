@@ -1,6 +1,6 @@
 # StepLens: Visual Analytics for Diagnosing Error-Detection Models in Procedural Cooking Videos
 
-*DS-GA 3001, Fall 2026 · [team names] · draft of Oct 18, 2026*
+*DS-GA 3001, Fall 2026 · Team 17: Harvey Yang, Jeremy Hsu · draft of Oct 26, 2026 (revised after the proposal feedback)*
 
 ## Abstract
 
@@ -10,16 +10,19 @@ supervised error-recognition models with a single accuracy, F1 and AUC per model
 built StepLens, an interactive system that links an error-category × model miss-rate
 matrix, recipe task graphs colored by miss rate, recording timelines aligned with the
 video, and a slice table that ranks metadata subgroups by how much worse a model does
-there, with hold-out confirmation. We reproduced the paper's baselines over its released
-features (Omnivore MLP 74.1 vs 75.7 AUC; transformer 73.3 vs 75.7) and used the tool to
-answer where they fail. Failures are not category-specific: per-category recall is flat
-within a few points for every Omnivore model. They are cook- and recording-specific: one
-participant is missed 61–69% of the time by every model on every split, and on held-out
-recordings steps with a single subtle error are missed far more often than steps with
-compound errors. Along the way the tool exposed two properties of the benchmark that the
-paper's tables hide: the Missing Step category is never scored, and the released step
-split is unshuffled, so its validation and test phases are different populations. Two
-findings-guided fixes did not improve F1, and we explain why. We evaluate the tool
+there, with hold-out confirmation. The authors' released checkpoints, scored on our
+reconstruction of the test phase, reproduce the paper's step-split numbers to within 0.6
+points; our own retrained models reach 74.3 ± 2.2 AUC (MLP) and 73.3 (transformer) against
+75.7. Failures are not mainly category-specific: per-category recall varies by a few
+points for our Omnivore models. They are cook- and recording-specific: one participant is
+missed more often than average by every model we checked, including the authors' four
+checkpoints, and on held-out recordings steps with a single subtle error are missed more
+often than steps with compound errors. Re-implementing the benchmark also surfaced two
+properties of the released code that affect how its numbers are read: steps annotated as
+skipped are not evaluated, so the Missing Step category is outside the benchmark, and the
+step split assigns steps to phases in annotation order, so its validation and test phases
+differ in position within the recipe. Two findings-guided fixes did not improve F1, and we
+explain why. We evaluate the tool
 through four case studies, each of which produced a finding that the paper's tables
 cannot show and that survives the tool's hold-out, model-switch and seed checks.
 
@@ -45,9 +48,13 @@ properties of the released benchmark that affect how its numbers should be read.
 ## 2. Related work
 
 Assembly101, HoloAssist and PREGO study mistakes in procedural tasks; HD-EPIC annotates
-real kitchens in detail; Ego4D and Ego-Exo4D provide keystep annotations at scale. All of
-them evaluate models with aggregate metrics and none ships a tool for inspecting
-failures. On the visual-analytics side, ModelTracker and Squares show per-instance and
+real kitchens in detail; Ego4D and Ego-Exo4D provide keystep annotations at scale. They
+evaluate models with aggregate metrics, and to our knowledge none of them ships a tool for
+inspecting the failures of the models benchmarked on it. The closest system we know of is
+ARGUS (Castelo et al., IEEE VIS 2023), which visualizes the outputs of perception and
+step-detection models next to the sensor streams of AR task-guidance sessions, live and
+after the fact; StepLens differs in aggregating across hundreds of recordings by error
+category and metadata slice and in checking whether a slice is stable. On the visual-analytics side, ModelTracker and Squares show per-instance and
 per-class performance, Manifold compares models where they disagree, the What-If Tool
 probes slices, Calibrate analyzes probabilistic outputs and Domino discovers
 underperforming slices automatically. StepLens borrows per-class matrices, model
@@ -62,23 +69,42 @@ frozen features (Omnivore, SlowFast, X3D, 3D-ResNet at 1 s; ImageBind video, aud
 text at 2 s) and the 360p GoPro videos of ten recordings. The dataset is released under
 Apache 2.0 (project website, downloader and error-recognition repositories; the
 annotations repository's README says the same while its LICENSE file is MIT). The feature archive is public
-and 114 GB; the 9 GB of segment features are all that the benchmark needs. Four facts
-matter for everything that follows:
+and 114 GB; the 9 GB of segment features are all that the benchmark needs. The authors
+also released the checkpoints used in the paper (error_recognition issue #1); we score
+every step with eight of them (section 5). Code references below are to
+`error_recognition` at commit `35ef284`; full evidence is in `docs/feedback_response.md`.
 
-1. **Missing Step errors are never scored.** Skipped steps carry start and end time −1
-   and the official dataloader drops them, so 285 of the 2,566 annotated errors, one of
-   the seven categories, are outside the supervised benchmark. StepLens shows them as
+1. **Skipped steps are not evaluated.** Steps annotated as skipped have no video segment
+   (start and end time −1) and the released dataloader excludes them
+   (`CaptainCookStepDataset.py` L89–90), so the supervised benchmark does not evaluate
+   the Missing Step category (285 of 2,566 annotated errors). StepLens shows that row as
    "–" in every model column.
-2. **The step split is not random.** The official code shuffles a temporary list and
-   then slices the steps in annotation order: train = the first 75% of each recording's
-   steps, the phase the code calls "test" = the next 16%, "val" = the last 9%. Their mean
-   relative positions in the recipe are 0.35, 0.78 and 0.91. The test set has 557 of its
-   799 steps in the last quarter of the recipe and one in the first. We add a seeded
-   random split with the same proportions (`step_random`) as a control.
-3. **A step can carry several errors** (518 of 1,933 error steps do), and the annotation
-   files include an eighth category, Other, with 8 errors.
+2. **The step split follows annotation order.** In the released code the shuffle acts on
+   a temporary copy of the step list (L146–147), and steps are then assigned in
+   annotation order (L152–189): the first 75% of each recording's steps to train, the next
+   16% to the phase named "test", the last 9% to "val". The phases therefore differ in
+   position within the recipe (mean relative position 0.35, 0.78, 0.91; Fig. 1), and
+   validation results transfer poorly to test: the authors' own Omnivore MLP checkpoint
+   has validation AUC 65.6 and test AUC 76.2. That the authors' checkpoints reproduce
+   Table 10 on exactly this test phase (section 5) confirms that this is the split the
+   paper evaluated on. We add a seeded random split with the same proportions as a
+   control.
+3. **Steps carry several errors.** 518 of the 1,659 scored error steps carry two or more
+   of the six scored categories; the files also contain an eighth category, Other (8
+   errors), which we show separately.
 4. **The public archive has no depth features**, so the paper's four-modality ImageBind
    model cannot be reproduced; ImageBind features cover 383 of 384 recordings.
+5. **Smaller observations.** The thresholds that reproduce Table 10 (min-max
+   normalization of the test scores, 0.6 for the step split and 0.4 otherwise) are given
+   in the README, while the evaluation script sweeps 0.5 and 0.6. In Table 8 one F1 value
+   (TimeChat, Missing Steps) differs from the value its precision and recall imply (12.4
+   vs 2 × 2.2 × 0.4 / 2.6 = 0.68). The evaluation script defines `val_best_epochs` and
+   `test_best_epochs`; for the recording, person and environment splits the epochs used,
+   and the released checkpoints, match `test_best_epochs` in 36 of 42 configurations.
+   Re-scoring the alternative epochs moves test F1 in both directions, so we report this
+   only as an observation.
+
+![Figure 1. Relative position of each step within its recording, by phase, under the released step split (left) and our seeded random split (right).](figures/split_positions.png)
 
 ## 4. StepLens
 
@@ -103,6 +129,14 @@ the AUC inside the slice, and the same slice re-evaluated on the hold-out phase.
 *compare strip* shows, per category, how many errors both models catch, only one
 catches, or neither.
 
+**Steps with several categories.** The model makes one error/normal decision per step.
+In the matrix a step counts in every category row it carries and is caught or missed in
+all of them at once, so rows overlap (the 252 test error steps contribute 342 category
+entries). A switch restricts the matrix to single-category steps; for the transformer this
+changes per-category recall by at most 6 points, so no category claim depends on the
+convention. Co-occurrence is strongest for Temperature: 75% of its steps carry another
+category, and only two test steps are Temperature-only.
+
 **Operating points.** Raw score scales differ by model (the balanced threshold is 0.01
 for one transformer and 0.07 for an MLP), so one global threshold would be unfair. Each
 model's threshold is chosen on its own validation steps, by a rule the user picks:
@@ -115,14 +149,25 @@ sets its attributes, a task-graph node sets the step, a recipe bar opens its gra
 all views re-render against the same selection. The complete state lives in the URL, so a
 finding is a link. Light and dark themes use the same validated palette.
 
-**Implementation.** Python (pandas, PyTorch, FastAPI) and D3 without a build step; 24
-prediction sets at the time of writing; headless-browser click tests cover every linked
+**Implementation.** Python (pandas, PyTorch, FastAPI) and D3 without a build step; 40
+prediction sets at the time of writing (32 trained by us, 8 from the authors' checkpoints); headless-browser click tests cover every linked
 interaction.
 
 ## 5. Reproducing the baselines
 
-We ported the official MLP and transformer heads and training loop (one step per batch,
-BCE on every 1-second row, Adam, gradient clipping, model selection by validation AUC).
+**The authors' checkpoints.** Their parameter names match our port of the heads, so we
+load them unchanged and score every step. On the step split's test phase they reproduce
+Table 10 under the README protocol: the transformer gets accuracy 69.96 (paper 69.96),
+precision 52.1 (51.6), recall 59.5 (59.8), F1 55.6 (55.4) and AUC 75.8 (75.7); the MLP gets
+70.8 (71.1), 67.3 (66.1), 14.7 (14.9), 24.1 (24.3) and 76.2 (75.7). This validates our data
+pipeline and test-phase reconstruction, and it shows that the two models' AUCs are
+genuinely close rather than copied.
+
+**Our own training.** We ported the released training loop (one step per batch, BCE on
+every 1-second row without a positive-class weight, Adam, gradient clipping, model
+selection by validation AUC). These settings come from the code; the paper states batch
+512, a positive-class weight of 1.5 and 50 epochs, and the first author confirmed in issue
+#3 that the paper's settings were used, which explains part of the gap below.
 
 | Model, official step split, test phase | AUC (ours / paper) | Paper protocol F1 (ours / paper) | Balanced point: recall / false alarm / F1 |
 | --- | --- | --- | --- |
@@ -134,13 +179,14 @@ BCE on every 1-second row, Adam, gradient clipping, model selection by validatio
 | ImageBind V+A+T transformer, official | 60.5 / – | 14.1 / – | 53.6 / 40.8 / 44.3 |
 | Omnivore MLP, lr 1e-4, random step split | 80.1 / – | 3.1 / – | 65.5 / 20.1 / 62.6 |
 
-Three observations. First, with a ten-times smaller learning rate the Omnivore models
-land within 2.4 AUC points of the paper; at the official rate the MLP's training loss
-never drops below the constant predictor's. Second, the paper's threshold protocol is
-brittle: min-max normalization depends on the single highest score, and for all our
-models the 0.6 threshold flags almost nothing. We never reproduced the reported F1 of
-55.4, while at a balanced operating point every Omnivore model, MLP or transformer,
-lands at F1 56–57. Third, the split matters more than the head: the same MLP recipe
+Three observations. First, with a ten-times smaller learning rate our Omnivore models
+land within 2.4 AUC points of the paper (and within seed noise: 74.3 ± 2.2 over three
+seeds); at the code's learning rate the MLP's training loss never drops below the
+constant predictor's. Second, the README protocol reproduces the paper with the authors'
+checkpoints but flags almost nothing with ours: min-max normalization over the test
+scores makes the 0.6 threshold depend on each model's score distribution, which differs
+with the training settings. At a balanced operating point chosen on validation, every
+Omnivore model, ours or the authors', MLP or transformer, lands at F1 56–57. Third, the split matters more than the head: the same MLP recipe
 scores 74.1 on the official step split and 80.1 on the random one, partly because
 selection on the official "val" phase (last steps of each recipe) is unreliable for its
 "test" phase (middle steps).
@@ -161,21 +207,35 @@ Temperature errors that the paper's zero-shot models almost never detect, at the
 35–56% false alarms. SlowFast is the only backbone with a category profile: it misses
 Preparation and Technique errors most (45%, 44%) and Temperature least (11%).
 
-**RQ1b: by cook.** Person 2 is the hardest participant for every model on every split
-and every seed: missed 65 ± 6% by the Omnivore MLP (three seeds) and 38 ± 5% by the
-transformer (three seeds, against 17 ± 4% overall) on the step split, and 61% by the
-recording-split transformer on five held-out recordings, with per-person AUC 0.56–0.61
-against 0.68–0.74 overall. The walkthroughs (case study 1) show misses that are quantity
+**RQ1b: by cook.** Person 2 is missed more often than average by every model we checked,
+on every split and seed: 65 ± 6% by our Omnivore MLP (three seeds, 25% overall), 38 ± 5%
+by our transformer (17 ± 4% overall), 61% by the recording-split transformer on five
+held-out recordings (26% overall), and 62%, 100%, 89% and 22% by the authors' four
+Omnivore checkpoints under the paper's protocol (overall 40%, 85%, 63% and 14%).
+Per-person AUC is lower than overall for most of these models (e.g. 0.56–0.61 vs
+0.68–0.74 for ours), though not for every one. The walkthroughs (case study 1) show misses that are quantity
 and duration deviations, caught errors that involve a visible event.
 
 **RQ1c: by kitchen, with a caveat.** For the tuned MLP on the official step split, kitchen
-2 is missed 60% of the time, confirmed on the hold-out phase, with slice AUC 0.65. The same
-recipe on the random split and the recording-split transformer do not show it, and
-re-training the same recipe with two more seeds moves kitchen 2's miss rate between 23% and
-60% (41 ± 15%) while person 2's stays at 65 ± 6%. A slice is a failure mode only when it
-survives the hold-out check, a change of model and a change of seed; the tool's hold-out
-column catches sampling noise but not run-to-run variance, so we report seeds separately
-(`docs/seeds.md`).
+2 is missed 60% of the time (26% overall), confirmed on the hold-out phase, with slice AUC
+0.65. Re-training the same recipe with two more seeds gives 23% and about 40% (41 ± 15%),
+while person 2 stays at 65 ± 6%. Kitchen 2 is modestly above average on most step-split
+models (our transformer +7 to +11 points on each seed, the authors' transformer +15) and at
+the average on held-out recordings, so the finding is "kitchen 2 is somewhat harder, and
+the size of the effect is not stable", not the 34-point gap one run suggested. The tool's
+hold-out column catches sampling noise but not run-to-run variance, so we report seeds
+separately (`docs/seeds.md`).
+
+**How often a flagged slice survives.** Across eight models, 71 slices were flagged on
+validation (z ≥ 2, at least 10 error steps); of the 59 with at least 5 test errors, 43
+(73%) stay above the overall miss rate on test, 19 (32%) stay significant, and 16 (27%)
+reverse (Fig. 2, `docs/slice_survival.md`). Across seeds of the same configuration only
+4–7 of 8–11 flagged slices are flagged again. On the official step split survival is
+100%, which is not reassuring: its validation and test steps come from the same
+recordings, so a person or kitchen effect carries over by construction. A single flagged
+slice is therefore a hypothesis; we call it a finding only after the model and seed checks.
+
+![Figure 2. Slices flagged on validation, re-checked on test, for eight models. Size: test error steps.](figures/slice_survival.png)
 
 **RQ1d: position and compound errors.** On the random split the first and last quarters
 of a recipe are missed most (40%, 42% vs 25–31%); the official split cannot show this
@@ -206,33 +266,51 @@ steps) and the depth stream for the multimodal model.
 
 ## 8. Evaluating the tool: case studies
 
-We evaluate StepLens the way visual-analytics systems are usually evaluated when a
-controlled study is out of scope: by case studies that ask whether the tool surfaces
-findings the existing workflow (the paper's aggregate tables) cannot, and whether its
-own safeguards tell a real finding from a spurious one. Full walkthroughs with video
+We evaluate StepLens with case studies that ask whether the tool surfaces findings the
+existing workflow cannot, and whether its safeguards tell a real finding from a spurious
+one. Because case studies written by the tool's authors can be chosen to fit the tool, we
+compare against a strong baseline, not only against the paper's tables: a notebook with
+slicing tables (every attribute and pair, with hold-out columns) and plots of the miss
+rate per attribute with Wilson intervals, a person × kitchen heat map and score
+histograms (`docs/user_study/baseline_notebook.ipynb`). Full walkthroughs with video
 links are in `docs/case_studies.md`.
 
 | Case study | View that surfaced it | What the aggregate tables could not show | Safeguard outcome |
 | --- | --- | --- | --- |
 | 1. A held-out cook (person 2, recordings 25_40 and 27_37) | slice table → timeline + video | one participant is missed 61–69% by every model; the misses are quantity and duration deviations, the catches visible events | holds on hold-out, across splits, across seeds |
 | 2. Temperature and Timing errors | matrix | supervised models catch them as well as any category; Missing Step is never scored by anyone | holds for every model |
-| 3. Kitchen 2 | slice table (z, hold-out, slice AUC) → compare mode | a 60%-missed slice with a confirmed hold-out that still turned out to be a property of one run | fails the model-switch and seed checks; reported as a non-finding |
+| 3. Kitchen 2 | slice table (z, hold-out, slice AUC) → compare mode | a 60%-missed slice with a confirmed hold-out whose size turned out to be a property of one run | the 34-point gap fails the seed check; a smaller +7 to +15 point effect remains on most step-split models |
 | 4. Position in the recipe | slice table on two splits | the official split has one early test step; the random split shows first/last quarters missed most | holds on the random split only |
 
-Two conclusions about the tool itself. First, the slice table alone would have reported
-kitchen 2 as a failure mode; only the combination of the hold-out column, the AUC inside
-the slice and switching models exposed it, which argues for keeping all three in the
-interface. Second, every finding was reached by a chain of at most three clicks and is
-reproducible from a link, which is what made the seed study and the cross-split checks
-cheap to run. A controlled user study against a notebook baseline was designed
-(`docs/user_study/`: protocol, task sheet, SUS, consent, reference answers and an executed
-notebook) but not run; it is the natural next step.
+Which findings each workflow surfaces:
+
+| Finding | Notebook (slicing + plots) | StepLens |
+| --- | --- | --- |
+| Categories are missed at similar rates | yes (bar chart) | yes (matrix) |
+| Person 2 is missed far more than average | yes (bar chart with CI) | yes (top of the slice table) |
+| Kitchen 2 at 60% for one run | yes, and it looks just as convincing | yes, with hold-out and slice AUC |
+| Kitchen 2's size is unstable across seeds and models | only by re-running per model and seed | one-click model switch; seeds offline |
+| Kitchen 1 raises the most false alarms | yes (tables) | yes (sort by false alarms) |
+| Pairwise slices and their validation-to-test survival | tables yes; survival needs extra code | built into every row |
+| Why misses happen (quantity and duration deviations are invisible) | no | timeline + video |
+| Single-category errors missed more than compound ones | no | not directly; hypothesis from clips, number from code |
+| Missing Step is never scored | only if the absent rows are noticed | "–" row in the matrix |
+| The step split's position bias | no | no; found by reading the code |
+
+A careful notebook finds most single-attribute rate findings. What the tool adds is
+validation attached to every slice with fast switching between models, which is what
+exposed the instability of kitchen 2, and the link from a number to the video, which is
+where the explanations came from. Neither view found the properties of the benchmark
+code; reading the code did. A controlled user study would need IRB approval and is out of
+scope; any outside feedback we collect will be a formative, qualitative expert
+walk-through. Materials for a future controlled study are in `docs/user_study/`.
 
 ## 9. Limitations
 
 Three seeds for the three key MLP recipes and the tuned transformer, one seed for the
 rest; across seeds the official-split Omnivore MLP varies by ±2.2 AUC, as large as its gap
-to the paper (`docs/seeds.md`); 360p
+to the paper (`docs/seeds.md`); our training follows the released code rather than the
+paper's stated settings; one flagged slice in four reverses on new data; 360p
 features released by the authors rather than our own; no depth features; Temperature has
 nine test errors; the official step split's biases limit what can be said about
 position; the tool is evaluated by case studies rather than a controlled user study; all
@@ -240,8 +318,9 @@ numbers come from one dataset and one domain.
 
 ## 10. Conclusion
 
-The paper's aggregate numbers hid an excluded category, an unshuffled split, a brittle
-threshold protocol and a cook that no model can read. A tool that keeps steps, slices and
+The paper's aggregate numbers do not show that one category is outside the benchmark,
+that the step split's phases differ in position within the recipe, or that one cook is
+hard for every model, including the authors' own. A tool that keeps steps, slices and
 video linked, insists on hold-out confirmation, and lets the analyst switch models found
 all of them in a day, and also showed which of its own findings not to trust. The next
 things to do are a controlled user study, multi-seed confidence intervals for every

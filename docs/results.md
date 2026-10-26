@@ -31,6 +31,14 @@ Paper protocol = min-max normalized step scores, threshold 0.6 (step splits) or 
 | omnivore_transformer_video_step_lr1e-5 | step | 1e-05 | 14 | 73.3 | 75.7 | 71.2 / 30.7 / 20.2 | 55.4 | 0.01 | 87.7 / 55.9 / 56.7 |
 | omnivore_transformer_video_step_lr1e-5-s1 | step | 1e-05 | 13 | 73.3 | 75.7 | 71.3 / 30.0 / 19.4 | 55.4 | 0.02 | 78.6 / 42.4 / 58.1 |
 | omnivore_transformer_video_step_lr1e-5-s2 | step | 1e-05 | 23 | 73.3 | 75.7 | 71.7 / 37.6 / 27.0 | 55.4 | 0.01 | 83.7 / 50.5 / 57.1 |
+| paper_imagebind_transformer_video_recordings | recordings | nan | 27 | 46.2 | 65.2 | 37.0 / 53.4 / 100.0 | 56.0 | 0.01 | 100.0 / 100.0 / 53.0 |
+| paper_imagebind_transformer_video_step | step | nan | 20 | 56.6 |  | 62.5 / 35.1 / 32.1 |  | 0.01 | 100.0 / 100.0 / 48.0 |
+| paper_omnivore_mlp_video_recordings | recordings | nan | 33 | 62.9 |  | 50.5 / 55.6 / 86.0 |  | 0.46 | 69.4 / 49.4 / 54.0 |
+| paper_omnivore_mlp_video_step | step | nan | 43 | 76.2 | 75.7 | 70.8 / 24.1 / 14.7 | 24.3 | 0.32 | 86.5 / 48.3 / 59.4 |
+| paper_omnivore_transformer_video_recordings | recordings | nan | 31 | 62.2 |  | 61.3 / 40.6 / 36.8 |  | 0.01 | 66.1 / 50.8 / 51.6 |
+| paper_omnivore_transformer_video_step | step | nan | 9 | 75.8 | 75.7 | 70.0 / 55.6 / 59.5 | 55.4 | 0.27 | 82.5 / 46.6 / 58.2 |
+| paper_slowfast_mlp_video_step | step | nan | 15 | 63.1 |  | 33.9 / 48.7 / 99.6 |  | 0.45 | 69.4 / 49.2 / 50.3 |
+| paper_slowfast_transformer_video_step | step | nan | 25 | 66.8 |  | 67.7 / 32.1 / 24.2 |  | 0.17 | 74.6 / 51.2 / 52.2 |
 | slowfast_mlp_video_step | step | 0.001 | 25 | 65.7 |  | 68.7 / 9.4 / 5.2 |  | 0.02 | 94.4 / 85.7 / 49.6 |
 | slowfast_mlp_video_step_lr1e-4 | step | 0.0001 | 24 | 68.3 |  | 69.5 / 19.2 / 11.5 |  | 0.02 | 61.5 / 35.1 / 51.8 |
 | slowfast_mlp_video_step_lr1e-4-s1 | step | 0.0001 | 19 | 67.8 |  | 69.3 / 20.7 / 12.7 |  | 0.03 | 61.9 / 34.7 / 52.2 |

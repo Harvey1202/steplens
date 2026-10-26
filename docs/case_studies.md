@@ -88,13 +88,17 @@ validation steps bring kitchen 2's misses down to 4% but push its false alarms f
 it cannot create separation. Subtracting each recording's mean feature (a shift
 correction) lowers AUC everywhere (74.1 → 70.4) and does not help kitchen 2 (0.65 → 0.63).
 
-Then the model switch: the same recipe trained on the *random* step split gives kitchen 2
-an AUC of 0.77 against 0.80 overall (kitchen 5 is then the worst), and on held-out
+Then the model and seed switches: the same recipe trained on the *random* step split gives
+kitchen 2 an AUC of 0.77 against 0.80 overall (kitchen 5 is then the worst); on held-out
 recordings the recording-split transformer puts kitchen 2 at the overall level (28%
-missed, AUC 0.68). Kitchen 2 is a property of one model and one split, not of the
-kitchen. The tool's hold-out column would have passed it; only trying a second model
-exposed it. That is the practical rule we take from this: a slice is a failure mode when
-it survives the hold-out check *and* a change of model.
+missed vs 26%); and two more seeds of the same MLP recipe give 23% and about 40%. What
+remains is smaller: kitchen 2 is a few points harder on most step-split models (our
+transformer +7 to +11 points on each of three seeds, the authors' released transformer
++15). So the 34-point gap was a property of one run, while a modest kitchen effect may be
+real. The tool's hold-out column would have passed the large gap; only switching models
+and seeds sized it correctly. That is the practical rule we take from this: a slice is a
+failure mode when it survives the hold-out check *and* a change of model and seed, and its
+size should be quoted from the stable version.
 
 ## 4. What the split hides: position in the recipe
 

@@ -23,6 +23,7 @@ export const state = {
   sliceSort: 'z_miss',
   sliceCats: true,
   graphTable: false,
+  multiLabel: 'all',             // all | single: how the matrix counts steps with several error categories
   secondsCache: new Map(),       // `${model}|${rid}` -> {segment_len, seconds}
   segmentsCache: new Map(),      // rid -> [segments]
 };
@@ -205,6 +206,7 @@ function initControls() {
   bind('fCategory', 'category'); bind('fDuration', 'duration_bucket'); bind('fPosition', 'position_bucket');
   $('reset').addEventListener('click', () => { for (const k in state.filters) state.filters[k] = ''; state.selectedStep = null; update(); });
   $('theme').addEventListener('change', (e) => { applyTheme(e.target.value); update(); });
+  $('multiLabel').addEventListener('change', (e) => { state.multiLabel = e.target.value; V.renderMatrix(); });
   $('minSize').addEventListener('change', (e) => { state.minSize = +e.target.value || 10; scheduleSlices(); });
   $('sliceSort').addEventListener('change', (e) => { state.sliceSort = e.target.value; scheduleSlices(); });
   $('sliceCats').addEventListener('change', (e) => { state.sliceCats = e.target.checked; scheduleSlices(); });

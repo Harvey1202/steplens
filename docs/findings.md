@@ -167,6 +167,18 @@ has only 16 test errors, but its miss rate is 62% [38–81] against 35% overall.
 Person 2's interval excludes the overall rate for every model; kitchen 2's does so only
 for the first model.
 
+### 3d. Revisions after the proposal feedback (Oct 26)
+
+* The authors' released checkpoints reproduce Table 10 on our test-phase reconstruction
+  (transformer accuracy 69.96 = paper), see `feedback_response.md`.
+* Person 2 is missed more than average by all four of the authors' Omnivore checkpoints
+  as well (62/100/89/22% vs 40/85/63/14% under the paper's protocol).
+* Kitchen 2: the 60% run was an outlier, but kitchen 2 is modestly harder on most
+  step-split models (+7 to +15 points), so it is "somewhat harder, unstable size", not a
+  pure coincidence.
+* Slice survival across eight models: 73% of validation-flagged slices stay above average
+  on test, 32% stay significant, 27% reverse (`slice_survival.md`).
+
 ### 3c. Seed robustness (Oct 18, `seeds.md`)
 
 Three seeds of each key MLP recipe, test phase, balanced points:
