@@ -103,8 +103,7 @@ number to the video, which is where the explanations came from. Neither view fou
 benchmark properties; reading the code did. The final paper will present the case studies
 with this table next to them.
 
-On outside feedback: we will not run a controlled study (IRB). If we collect anything,
-it will be a formative, qualitative expert walk-through.
+On outside feedback: we will not run a controlled study (IRB).
 
 ## 3. Small categories, noisy models: how often flagged slices survive
 
