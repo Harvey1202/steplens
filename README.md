@@ -37,10 +37,10 @@ The repository contains the processed tables (`data/processed`); the models' pre
 are published as a release asset. You only need Python 3.10+:
 
 ```bash
-git clone <this repo> && cd Visulization_Of_ML
-# download StepLens_predictions.zip from the Releases page and unzip it in this folder,
+git clone https://github.com/Harvey1202/steplens && cd steplens
+# download StepLens_predictions_v0.2.zip from the Releases page and unzip it in this folder,
 # which creates data/predictions/<model_id>/{meta.json,steps.parquet,seconds.parquet}
-unzip ~/Downloads/StepLens_predictions.zip
+unzip ~/Downloads/StepLens_predictions_v0.2.zip
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn steplens.server:app --port 8781
 open http://127.0.0.1:8781/

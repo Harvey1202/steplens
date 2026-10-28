@@ -302,8 +302,7 @@ validation attached to every slice with fast switching between models, which is 
 exposed the instability of kitchen 2, and the link from a number to the video, which is
 where the explanations came from. Neither view found the properties of the benchmark
 code; reading the code did. A controlled user study would need IRB approval and is out of
-scope; any outside feedback we collect will be a formative, qualitative expert
-walk-through. Materials for a future controlled study are in `docs/user_study/`.
+scope. Materials for a future controlled study are in `docs/user_study/`.
 
 ## 9. Limitations
 
