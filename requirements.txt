@@ -7,3 +7,4 @@ fastapi
 uvicorn[standard]
 h5py
 tqdm
+umap-learn

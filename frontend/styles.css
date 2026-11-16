@@ -92,7 +92,15 @@ output { font-variant-numeric: tabular-nums; min-width: 2.8em; display: inline-b
 
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; padding: 12px 20px 40px; }
 .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 16px; min-width: 0; }
-#card-graph, #card-timeline { grid-column: 1 / -1; }
+#card-slices, #card-graph, #card-timeline { grid-column: 1 / -1; }
+#embed canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; }
+#embed .embed-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); margin: 8px 0 2px; }
+#embed .embed-legend .key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+#embed table.nb { margin-top: 8px; font-size: 12.5px; width: 100%; }
+#embed table.nb th, #embed table.nb td { padding: 3px 10px 3px 0; }
+#embed table.nb th:first-child, #embed table.nb td:first-child { white-space: normal; }
+#embed table.nb th { position: static; }
+#embed .nb-note { font-size: 12px; color: var(--ink-2); margin: 6px 0 0; }
 .card-head { margin-bottom: 10px; }
 .inline-controls { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 8px; color: var(--ink-2); font-size: 13px; }
 .inline-controls label { display: inline-flex; gap: 6px; align-items: center; }
@@ -117,6 +125,13 @@ tr.selected td { background: color-mix(in srgb, var(--accent) 14%, transparent);
 .legend .ramp { display: inline-block; width: 120px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #cde2fb, #3987e5, #0d366b); vertical-align: middle; margin: 0 4px; }
 .legend .key { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .legend .line { display: inline-block; width: 18px; height: 2px; margin-right: 6px; vertical-align: 3px; border-radius: 1px; }
+td.stab { color: var(--ink-2); }
+td.stab.all { color: var(--ink); font-weight: 600; }
+td.stab .dots { letter-spacing: 1px; font-size: 11px; vertical-align: 1px; }
+td.stab .dots .on { color: var(--ink); }
+td.stab .dots .off { color: var(--axis); }
+td.stab .mini { display: inline-block; width: 34px; height: 6px; border-radius: 3px; background: var(--grid); vertical-align: 1px; overflow: hidden; }
+td.stab .mini > span { display: block; height: 100%; background: var(--accent); }
 .compare { margin-top: 10px; }
 .compare svg { display: block; width: 100%; height: auto; }
 #graph svg { display: block; width: 100%; height: auto; }

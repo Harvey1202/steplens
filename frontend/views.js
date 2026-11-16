@@ -177,13 +177,202 @@ export function renderCompare() {
   box.appendChild(svg.node());
 }
 
+// ---------------------------------------------------------------- step-feature embedding
+let embedToken = 0;
+const OUTCOME_ORDER = ['TN', 'TP', 'FP', 'FN'];  // draw misses last so they sit on top
+const OUTCOME_LABEL = { TN: 'normal, not flagged', TP: 'error caught', FP: 'false alarm', FN: 'error missed' };
+
+function embedPalette() {
+  const m = state.meta, tab = d3.schemeTableau10;
+  const byIndex = (list) => new Map(list.map((v, i) => [String(v), tab[i % tab.length]]));
+  const recipes = d3.quantize(d3.interpolateSinebow, m.activities.length + 1);
+  return {
+    person_id: byIndex(m.persons),
+    environment_id: byIndex(m.environments),
+    activity_id: new Map(m.activities.map((a, i) => [String(a.activity_id), recipes[i]])),
+  };
+}
+
+function embedColorOf(d, pal) {
+  switch (state.embedColor) {
+    case 'outcome':
+      if (!d.oc) return cssVar('--muted');
+      return d.oc === 'TN' ? cssVar('--axis') : OUTCOME[d.oc].color();
+    case 'has_errors': return d.s.has_errors ? cssVar('--accent') : cssVar('--axis');
+    default: return pal[state.embedColor].get(String(d.s[state.embedColor])) || cssVar('--muted');
+  }
+}
+
+function embedLegend(pts, pal) {
+  const box = el('div', { class: 'embed-legend' });
+  const act = pts.filter((d) => d.active);
+  const item = (color, label, n) => { const s = el('span'); const k = el('span', { class: 'key' }); k.style.background = color; s.append(k, document.createTextNode(`${label} (${n})`)); box.appendChild(s); };
+  if (state.embedColor === 'outcome') {
+    for (const o of OUTCOME_ORDER.slice().reverse()) item(o === 'TN' ? cssVar('--axis') : OUTCOME[o].color(), OUTCOME_LABEL[o], act.filter((d) => d.oc === o).length);
+  } else if (state.embedColor === 'has_errors') {
+    item(cssVar('--accent'), 'step with an error', act.filter((d) => d.s.has_errors).length);
+    item(cssVar('--axis'), 'normal step', act.filter((d) => !d.s.has_errors).length);
+  } else if (state.embedColor === 'activity_id') {
+    box.appendChild(el('span', {}, `colored by recipe (${pal.activity_id.size}); hover a dot for its name`));
+  } else {
+    const name = state.embedColor === 'person_id' ? 'person' : 'kitchen';
+    for (const [v, c] of pal[state.embedColor]) { const n = act.filter((d) => String(d.s[state.embedColor]) === v).length; if (n) item(c, `${name} ${v}`, n); }
+  }
+  const faint = el('span'); const k = el('span', { class: 'key' }); k.style.background = cssVar('--grid');
+  faint.append(k, document.createTextNode(`outside phase / filters (${pts.length - act.length})`)); box.appendChild(faint);
+  return box;
+}
+
+function neighbourTable(info) {
+  const wrap = el('div');
+  const table = el('table', { class: 'nb' }), thead = el('thead'), hr = el('tr');
+  for (const [t, cls] of [[`A step's ${info.k} nearest neighbours share its …`, ''], ['agree', 'num'], ['chance', 'num'], ['lift', 'num']]) hr.appendChild(el('th', { class: cls }, t));
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody = el('tbody');
+  const pct = (v) => (Number.isFinite(v) ? `${(100 * v).toFixed(1)}%` : '–');
+  const row = (label, r, strong) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', {}, label));
+    tr.appendChild(el('td', { class: 'num' }, pct(r.agreement)));
+    tr.appendChild(el('td', { class: 'num' }, pct(r.chance)));
+    const lift = el('td', { class: 'num' }, Number.isFinite(r.lift) ? `${r.lift.toFixed(1)}×` : '–');
+    if (strong) lift.style.fontWeight = '600';
+    tr.appendChild(lift); tbody.appendChild(tr);
+  };
+  for (const r of info.neighbours || []) row(r.label, r, r.lift >= 2);
+  for (const r of info.outcomes || []) {
+    const m = state.modelById.get(r.model_id);
+    row(`outcome (missed vs caught) · ${m ? m.label : r.model_id}, ${r.n} ${r.phase} error steps`, r, r.lift >= 2);
+  }
+  table.appendChild(tbody); wrap.appendChild(table);
+  wrap.appendChild(el('p', { class: 'nb-note' }, `Measured in the full feature space (${info.feature_dims} dims, PCA to ${info.pca_dims}), not in the 2-D picture. Chance = probability that a random other step shares the label; lift = agree / chance. ${info.n_steps} steps · ${info.backbone}${info.center === 'recording' ? ', recording mean removed' : ''} · UMAP n_neighbors ${info.umap.n_neighbors}, min_dist ${info.umap.min_dist} · ${info.created}.`));
+  return wrap;
+}
+
+function openStep(key) {
+  const s = state.stepByKey.get(key);
+  if (!s) return;
+  state.recording = s.recording_id;
+  state.selectedStep = key;
+  renderTimeline();
+  renderEmbedding();
+  $('card-timeline').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+export async function renderEmbedding() {
+  const box = $('embed');
+  if (!state.embeddings.length) {
+    box.replaceChildren(el('div', { class: 'empty' }, 'No embedding yet. On a machine with the segment features (scripts/download_features.sh), run  python -m steplens.embedding --backbone omnivore  and reload.'));
+    return;
+  }
+  const info = state.embeddings.find((e) => e.name === state.embedName) || state.embeddings[0];
+  state.embedName = info.name;
+  $('embedName').value = info.name;
+  $('embedColor').value = state.embedColor;
+  const token = ++embedToken;
+  if (!state.embedCache.has(info.name)) {
+    let rows;
+    try { rows = await api.json(`/api/embedding/${encodeURIComponent(info.name)}`); } catch (e) { box.replaceChildren(el('div', { class: 'empty' }, `embedding failed: ${e.message}`)); return; }
+    state.embedCache.set(info.name, new Map(rows.map((r) => [r.step_key, [r.x, r.y]])));
+  }
+  if (token !== embedToken) return;
+  const coords = state.embedCache.get(info.name), model = state.modelA, preds = state.preds.get(model);
+  const pts = [];
+  for (const [key, [x, y]] of coords) {
+    const s = state.stepByKey.get(key); if (!s) continue;
+    const p = preds ? preds.get(key) : undefined;
+    pts.push({ key, x, y, s, p, active: !!p && inPhase(p) && matchesFilters(s), oc: p ? outcome(s, isPos(p, model)) : null });
+  }
+  const pal = embedPalette();
+  const W = Math.max(300, box.clientWidth || 600), H = Math.round(Math.min(520, Math.max(280, W * 0.7))), pad = 10;
+  const xs = d3.scaleLinear().domain(d3.extent(pts, (d) => d.x)).range([pad, W - pad]);
+  const ys = d3.scaleLinear().domain(d3.extent(pts, (d) => d.y)).range([H - pad, pad]);
+  for (const d of pts) { d.px = xs(d.x); d.py = ys(d.y); }
+
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = el('canvas', { role: 'img', 'aria-label': `UMAP of ${pts.length} steps from ${info.name} features, colored by ${state.embedColor}` });
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); canvas.style.height = `${H}px`;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const dot = (d, r) => { ctx.moveTo(d.px + r, d.py); ctx.arc(d.px, d.py, r, 0, 2 * Math.PI); };
+  ctx.globalAlpha = 0.6; ctx.fillStyle = cssVar('--grid'); ctx.beginPath();
+  for (const d of pts) if (!d.active) dot(d, 1.6);
+  ctx.fill();
+  const active = pts.filter((d) => d.active);
+  const rank = (d) => (state.embedColor === 'outcome' ? OUTCOME_ORDER.indexOf(d.oc) : d.s.has_errors ? 1 : 0);
+  active.sort((a, b) => rank(a) - rank(b));
+  ctx.globalAlpha = 0.85;
+  for (const [color, group] of d3.groups(active, (d) => embedColorOf(d, pal)).sort((a, b) => rank(a[1][0]) - rank(b[1][0]))) {
+    ctx.fillStyle = color; ctx.beginPath();
+    for (const d of group) dot(d, d.oc === 'FN' && state.embedColor === 'outcome' ? 3.1 : 2.5);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const sel = pts.find((d) => d.key === state.selectedStep);
+  if (sel) { ctx.strokeStyle = cssVar('--ink'); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sel.px, sel.py, 7, 0, 2 * Math.PI); ctx.stroke(); }
+
+  const delaunay = d3.Delaunay.from(pts, (d) => d.px, (d) => d.py);
+  const nearest = (evt) => {
+    const r = canvas.getBoundingClientRect(), mx = ((evt.clientX - r.left) * W) / r.width, my = ((evt.clientY - r.top) * H) / r.height;
+    const d = pts[delaunay.find(mx, my)];
+    return d && Math.hypot(d.px - mx, d.py - my) < 12 ? d : null;
+  };
+  canvas.addEventListener('mousemove', (evt) => {
+    const d = nearest(evt);
+    if (!d) { hideTip(); return; }
+    const s = d.s, rows = [
+      { label: 'recording', value: `${s.recording_id} · person ${s.person_id} · kitchen ${s.environment_id}` },
+      { label: 'errors', value: s.has_errors ? (s.error_list || []).join(', ') || 'yes' : 'none' },
+    ];
+    if (d.p) rows.push({ label: `model A (${d.p.phase})`, value: d.oc ? OUTCOME_LABEL[d.oc] : '–', color: d.oc && d.oc !== 'TN' ? OUTCOME[d.oc].color() : undefined });
+    showTip(evt, `${s.activity_name}: ${s.step_description.split(' -')[0]}`, rows, d.active ? 'click to open in the timeline' : 'outside the current phase or filters');
+  });
+  canvas.addEventListener('mouseleave', hideTip);
+  canvas.addEventListener('click', (evt) => { const d = nearest(evt); if (d && d.active) { hideTip(); openStep(d.key); } });
+
+  box.replaceChildren(canvas, embedLegend(pts, pal), neighbourTable(info));
+}
+
 // ---------------------------------------------------------------- slices
+const modelLabel =(id) => (state.modelById.get(id) || {}).label || id;
+const seedLabel = (id) => { const m = state.modelById.get(id); return m && m.seed != null ? `seed ${m.seed}` : id; };
+
+/** Dots for the runs of model A's configuration that flag this slice (●) or not (○). */
+function seedCell(r) {
+  const td = el('td', { class: 'num stab' });
+  if (!(r.seed_n > 1)) {
+    td.textContent = '–';
+    td.title = 'only one run of this configuration, so there is no seed check';
+    return td;
+  }
+  const dots = el('span', { class: 'dots', 'aria-hidden': 'true' });
+  for (let i = 0; i < r.seed_n; i++) dots.appendChild(el('span', { class: i < r.seed_k ? 'on' : 'off' }, i < r.seed_k ? '●' : '○'));
+  td.append(dots, document.createTextNode(` ${r.seed_k}/${r.seed_n}`));
+  if (r.seed_k === r.seed_n) td.classList.add('all');
+  td.title = `flagged (z ≥ 2) in ${r.seed_k} of ${r.seed_n} runs of this configuration` +
+    (r.seed_by && r.seed_by.length ? `: ${r.seed_by.map(seedLabel).join(', ')}` : '');
+  return td;
+}
+
+/** Share of the other models on the same split that flag this slice. */
+function modelCell(r, split) {
+  const td = el('td', { class: 'num stab' });
+  if (!(r.model_n > 0)) { td.textContent = '–'; td.title = 'no other model on this split'; return td; }
+  const bar = el('span', { class: 'mini', 'aria-hidden': 'true' });
+  bar.appendChild(el('span', { style: `width:${Math.round((100 * r.model_k) / r.model_n)}%` }));
+  td.append(bar, document.createTextNode(` ${r.model_k}/${r.model_n}`));
+  td.title = r.model_k
+    ? `flagged (z ≥ 2) by ${r.model_k} of ${r.model_n} other models on the ${split} split:\n${r.model_by.map(modelLabel).join('\n')}`
+    : `not flagged by any of the ${r.model_n} other models on the ${split} split`;
+  return td;
+}
+
 export async function renderSlices() {
   const box = $('slices');
   if (!state.modelA) { box.replaceChildren(el('div', { class: 'empty' }, 'No model.')); return; }
   box.style.opacity = '0.5';
   const holdout = state.phase === 'val' ? 'test' : 'val';
-  const q = new URLSearchParams({ model_id: state.modelA, phase: state.phase, threshold: thresholdFor(state.modelA), norm: state.norm, min_size: 10, min_errors: state.minSize, sort: state.sliceSort, categories: state.sliceCats, limit: 150, confirm: holdout });
+  const q = new URLSearchParams({ model_id: state.modelA, phase: state.phase, threshold: thresholdFor(state.modelA), norm: state.norm, min_size: 10, min_errors: state.minSize, sort: state.sliceSort, categories: state.sliceCats, limit: 150, confirm: holdout, rule: state.opRule, stability: true });
   const f = state.filters;
   if (f.activity_id) q.append('activity_id', f.activity_id);
   if (f.person_id) q.append('person_id', f.person_id);
@@ -195,9 +384,14 @@ export async function renderSlices() {
   const o = data.overall || {};
   const ci = (lo, hi) => (Number.isFinite(lo) && Number.isFinite(hi) ? ` [${Math.round(lo * 100)}–${Math.round(hi * 100)}]` : '');
   const confirmNote = data.confirm ? ` Hold-out column = the same slice on the ${data.confirm} steps (overall miss rate there ${fmtPct(data.confirm_overall_miss)}); a slice that stays above it on both phases is a confirmed failure mode.` : '';
-  box.appendChild(el('div', { class: 'legend' }, `Overall on this selection: miss rate ${fmtPct(1 - (o.recall ?? NaN))} (${(o.n_error ?? 0) - (o.tp ?? 0)} of ${o.n_error ?? 0} errors), false-alarm rate ${fmtPct(o.false_alarm)}. ${data.n_slices ?? 0} slices shown; brackets are 95% Wilson intervals.${confirmNote}`));
+  const stab = data.stability || { seed_runs: [], models: [] };
+  const split = (state.modelById.get(state.modelA) || {}).split || '';
+  const stabNote = stab.models.length || stab.seed_runs.length > 1
+    ? ` Seeds / models = in how many runs of this configuration (${stab.seed_runs.length}) and in how many other models on the ${split} split (${stab.models.length}, the authors' checkpoints included) the same slice is also flagged: miss rate above that model's own overall rate with z ≥ 2, each at its own threshold (${RULE_LABEL[state.opRule]}). A slice flagged by one run only is a hypothesis, not a finding.`
+    : '';
+  box.appendChild(el('div', { class: 'legend' }, `Overall on this selection: miss rate ${fmtPct(1 - (o.recall ?? NaN))} (${(o.n_error ?? 0) - (o.tp ?? 0)} of ${o.n_error ?? 0} errors), false-alarm rate ${fmtPct(o.false_alarm)}. ${data.n_slices ?? 0} slices shown; brackets are 95% Wilson intervals.${confirmNote}${stabNote}`));
   const table = el('table'), thead = el('thead'), tr = el('tr');
-  for (const [t, cls, title] of [['Slice', ''], ['errors', 'num'], ['missed', 'num'], ['miss rate', 'num'], ['Δ vs overall', 'num'], ['z', 'num'], ['hold-out', 'num', 'same slice on the hold-out phase; ✓ = also above the overall miss rate there'], ['AUC', 'num', 'error-vs-normal AUC inside the slice: low means the model cannot separate them there, high with a high miss rate means its scores are just shifted'], ['false alarm', 'num'], ['Δ', 'num']]) { const th = el('th', { class: cls }, t); if (title) th.title = title; tr.appendChild(th); }
+  for (const [t, cls, title] of [['Slice', ''], ['errors', 'num'], ['missed', 'num'], ['miss rate', 'num'], ['Δ vs overall', 'num'], ['z', 'num'], ['hold-out', 'num', 'same slice on the hold-out phase; ✓ = also above the overall miss rate there'], ['seeds', 'num', 'in how many runs of this model configuration (different training seeds) the slice is flagged (z ≥ 2)'], ['models', 'num', 'in how many other models on the same split the slice is flagged (z ≥ 2), each at its own threshold'], ['AUC', 'num', 'error-vs-normal AUC inside the slice: low means the model cannot separate them there, high with a high miss rate means its scores are just shifted'], ['false alarm', 'num'], ['Δ', 'num']]) { const th = el('th', { class: cls }, t); if (title) th.title = title; tr.appendChild(th); }
   thead.appendChild(tr); table.appendChild(thead);
   const tbody = el('tbody');
   for (const r of data.slices || []) {
@@ -212,6 +406,8 @@ export async function renderSlices() {
     const hold = el('td', { class: 'num' }, r.confirm_n_error ? `${confirmed ? '✓ ' : ''}${fmtPct(r.confirm_miss_rate)} (n=${r.confirm_n_error})` : '–');
     if (r.confirm_n_error) hold.title = `${fmtPct(r.confirm_miss_rate)}${ci(r.confirm_miss_lo, r.confirm_miss_hi)} missed on the ${data.confirm} steps; ` + (confirmed ? 'above the overall miss rate there too (confirmed)' : 'not above the overall miss rate there');
     row.appendChild(hold);
+    row.appendChild(seedCell(r));
+    row.appendChild(modelCell(r, split));
     row.appendChild(el('td', { class: 'num' }, Number.isFinite(r.auc) ? r.auc.toFixed(2) : '–'));
     row.appendChild(el('td', { class: 'num' }, fmtPct(r.false_alarm)));
     row.appendChild(el('td', { class: 'num' }, Number.isFinite(r.false_alarm_lift) ? `${r.false_alarm_lift >= 0 ? '+' : '−'}${Math.abs(Math.round(r.false_alarm_lift * 100))} pts` : '–'));
@@ -227,7 +423,7 @@ export async function renderSlices() {
     });
     tbody.appendChild(row);
   }
-  if (!(data.slices || []).length) tbody.appendChild(el('tr')).appendChild(el('td', { colspan: 10, class: 'empty' }, 'No slice meets the minimum size.'));
+  if (!(data.slices || []).length) tbody.appendChild(el('tr')).appendChild(el('td', { colspan: 12, class: 'empty' }, 'No slice meets the minimum size.'));
   table.appendChild(tbody);
   box.appendChild(table);
   box.style.opacity = '';
@@ -489,6 +685,7 @@ function selectStep(key, start) {
   const v = $('videoBox').querySelector('video');
   if (v && Number.isFinite(start)) { v.currentTime = Math.max(0, start); v.play().catch(() => {}); }
   renderTimeline();
+  renderEmbedding();
 }
 
 function renderDetail() {

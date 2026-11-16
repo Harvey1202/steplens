@@ -56,14 +56,31 @@
     <div id="compare" class="compare"></div>
   </section>
 
+  <section class="card" id="card-embed">
+    <div class="card-head"><h2>Step features (UMAP)</h2>
+      <p class="hint">Each dot is one step, placed by UMAP from the mean of its frozen segment features, which is what the error-recognition heads see. Steps outside the current phase and filters are drawn faint. If dots group by person or recording rather than by outcome, the features say more about who recorded a step than about whether it went wrong; the table below measures this in the full feature space. Hover for details, click a dot to open the step in the timeline.</p>
+      <div class="inline-controls">
+        <label>Features <select id="embedName"></select></label>
+        <label>Color by <select id="embedColor">
+          <option value="outcome" selected>outcome for model A</option>
+          <option value="person_id">person</option>
+          <option value="environment_id">kitchen</option>
+          <option value="activity_id">recipe</option>
+          <option value="has_errors">has an error</option>
+        </select></label>
+      </div></div>
+    <div id="embed"></div>
+  </section>
+
   <section class="card" id="card-slices">
     <div class="card-head"><h2>Slices with the most missed errors</h2>
-      <p class="hint">Metadata subgroups (recipe, person, kitchen, step duration, position in recipe, optionally × category), ranked by miss rate above the model's overall rate. Click a row to apply it as a filter.</p>
+      <p class="hint">Metadata subgroups (recipe, person, kitchen, step duration, position in recipe, optionally × category), ranked by miss rate above the model's overall rate. The seeds and models columns show whether other training runs and other models flag the same slice. Click a row to apply it as a filter.</p>
       <div class="inline-controls">
         <label>min error steps <input type="number" id="minSize" min="3" max="500" step="1" value="10"></label>
         <label>sort <select id="sliceSort">
           <option value="z_miss">misses, most significant first</option>
           <option value="miss_lift">misses, largest gap vs overall</option>
+          <option value="model_k">flagged by the most other models</option>
           <option value="z_fa">false alarms, most significant first</option>
           <option value="n_error">largest slices</option>
         </select></label>

@@ -24,6 +24,10 @@ export const state = {
   sliceCats: true,
   graphTable: false,
   multiLabel: 'all',             // all | single: how the matrix counts steps with several error categories
+  embeddings: [],                // [{name, backbone, neighbours, outcomes, ...}] from /api/embeddings
+  embedName: '',
+  embedColor: 'outcome',         // outcome | person_id | environment_id | activity_id | has_errors
+  embedCache: new Map(),         // name -> Map(step_key -> [x, y])
   secondsCache: new Map(),       // `${model}|${rid}` -> {segment_len, seconds}
   segmentsCache: new Map(),      // rid -> [segments]
 };
@@ -148,8 +152,10 @@ async function fetchSegments(rid) {
 export const api = { fetchSeconds, fetchSegments, json: j };
 
 async function load() {
-  const [meta, steps, graphs, models] = await Promise.all([j('/api/meta'), j('/api/steps'), j('/api/task_graphs'), j('/api/models')]);
+  const [meta, steps, graphs, models, embeddings] = await Promise.all([j('/api/meta'), j('/api/steps'), j('/api/task_graphs'), j('/api/models'), j('/api/embeddings')]);
   state.meta = meta;
+  state.embeddings = embeddings;
+  state.embedName = (embeddings.find((e) => e.name === 'omnivore') || embeddings[0] || {}).name || '';
   state.steps = steps;
   for (const s of steps) state.stepByKey.set(s.step_key, s);
   state.graphs = graphs;
@@ -194,6 +200,8 @@ function initControls() {
   fill($('fCategory'), m.category_keys.map((k, i) => [k, m.categories[i]]));
   fill($('fDuration'), ['<15s', '15-30s', '30-60s', '60-120s', '>120s'].map((d) => [d, d]));
   fill($('fPosition'), [['Q1', 'Q1 (first quarter)'], ['Q2', 'Q2'], ['Q3', 'Q3'], ['Q4', 'Q4 (last quarter)']]);
+  fill($('embedName'), state.embeddings.map((e) => [e.name, `${e.name} (${e.n_steps} steps)`]), false);
+  $('embedName').disabled = state.embeddings.length < 2;
 
   $('modelA').addEventListener('change', (e) => { state.modelA = e.target.value; if (state.opRule !== 'custom') state.threshold = thresholdFor(state.modelA); update(); });
   $('modelB').addEventListener('change', (e) => { state.modelB = e.target.value; update(); });
@@ -207,6 +215,8 @@ function initControls() {
   $('reset').addEventListener('click', () => { for (const k in state.filters) state.filters[k] = ''; state.selectedStep = null; update(); });
   $('theme').addEventListener('change', (e) => { applyTheme(e.target.value); update(); });
   $('multiLabel').addEventListener('change', (e) => { state.multiLabel = e.target.value; V.renderMatrix(); });
+  $('embedName').addEventListener('change', (e) => { state.embedName = e.target.value; writeUrlState(); V.renderEmbedding(); });
+  $('embedColor').addEventListener('change', (e) => { state.embedColor = e.target.value; writeUrlState(); V.renderEmbedding(); });
   $('minSize').addEventListener('change', (e) => { state.minSize = +e.target.value || 10; scheduleSlices(); });
   $('sliceSort').addEventListener('change', (e) => { state.sliceSort = e.target.value; scheduleSlices(); });
   $('sliceCats').addEventListener('change', (e) => { state.sliceCats = e.target.checked; scheduleSlices(); });
@@ -272,6 +282,8 @@ function readUrlState() {
   if (q.get('threshold') !== null && Number.isFinite(+q.get('threshold'))) { state.threshold = +q.get('threshold'); if (!q.get('rule')) state.opRule = 'custom'; }
   if (q.get('recording')) state.recording = q.get('recording');
   for (const k of Object.keys(state.filters)) if (q.get(k)) state.filters[k] = q.get(k);
+  if (q.get('embed') && state.embeddings.some((e) => e.name === q.get('embed'))) state.embedName = q.get('embed');
+  if (q.get('color') && [...$('embedColor').options].some((o) => o.value === q.get('color'))) state.embedColor = q.get('color');
   return q.get('threshold') !== null;
 }
 function writeUrlState() {
@@ -281,6 +293,8 @@ function writeUrlState() {
   if (state.opRule === 'custom') q.set('threshold', state.threshold.toFixed(2));
   for (const [k, v] of Object.entries(state.filters)) if (v) q.set(k, v);
   if (state.recording) q.set('recording', state.recording);
+  if (state.embeddings.length > 1 && state.embedName) q.set('embed', state.embedName);
+  if (state.embedColor !== 'outcome') q.set('color', state.embedColor);
   const theme = document.documentElement.dataset.theme; if (theme) q.set('theme', theme);
   history.replaceState(null, '', `?${q}`);
 }
@@ -295,6 +309,7 @@ export function update() {
   V.renderSummary();
   V.renderMatrix();
   V.renderCompare();
+  V.renderEmbedding();
   V.renderGraph();
   V.renderTimeline();
   scheduleSlices();

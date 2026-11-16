@@ -7,6 +7,7 @@ All functions take a DataFrame with one row per step that has at least:
 from __future__ import annotations
 
 import itertools
+import re
 
 import numpy as np
 import pandas as pd
@@ -201,6 +202,43 @@ def slice_table(df: pd.DataFrame, pred: pd.Series, min_size: int = 10, max_order
     if len(out):
         out = out.sort_values("z_miss", ascending=False, na_position="last").reset_index(drop=True)
     return out
+
+
+FLAG_Z = 2.0
+
+
+def flagged_slices(df: pd.DataFrame, pred: pd.Series, min_size: int = 10, min_errors: int = 10,
+                   max_order: int = 2, include_categories: bool = True, z: float = FLAG_Z) -> set[str]:
+    """Names of the slices whose miss rate is significantly above the overall miss rate (z_miss >= z).
+
+    Same enumeration as :func:`slice_table` (and as ``scripts/slice_survival.py``), without the
+    per-slice AUC, so it is cheap enough to run for every model on every request.
+    """
+    tab = slice_table(df, pred, min_size=min_size, max_order=max_order, include_categories=include_categories,
+                      min_errors=min_errors)
+    if not len(tab):
+        return set()
+    return set(tab.loc[tab["z_miss"] >= z, "slice"])
+
+
+def seed_config(model_id: str) -> str:
+    """Model id without its seed suffix: ``omnivore_mlp_video_step_lr1e-4-s2`` -> ``omnivore_mlp_video_step_lr1e-4``."""
+    return re.sub(r"-s\d+$", "", model_id)
+
+
+def stability_columns(slices, seed_runs: dict[str, set], other_models: dict[str, set]) -> pd.DataFrame:
+    """For each slice name, in how many seed runs and in how many other models it is flagged.
+
+    ``seed_runs`` maps every run of model A's configuration (A included) to its flagged slices;
+    ``other_models`` maps one run of every other configuration on the same split to its flagged slices.
+    """
+    rows = []
+    for s in slices:
+        seed_by = [m for m, f in seed_runs.items() if s in f]
+        model_by = [m for m, f in other_models.items() if s in f]
+        rows.append(dict(seed_k=len(seed_by), seed_n=len(seed_runs), seed_by=seed_by,
+                         model_k=len(model_by), model_n=len(other_models), model_by=model_by))
+    return pd.DataFrame(rows, columns=["seed_k", "seed_n", "seed_by", "model_k", "model_n", "model_by"])
 
 
 def bootstrap_ci(y: np.ndarray, p: np.ndarray, stat: str = "recall", n_boot: int = 500, seed: int = 0):

@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 
 from steplens.data import CAT_KEYS
-from steplens.metrics import binary_metrics, confirm_slices, normalize_scores, per_category, slice_table, wilson
+from steplens.metrics import (binary_metrics, confirm_slices, flagged_slices, normalize_scores, per_category,
+                              seed_config, slice_table, stability_columns, wilson)
 
 
 def synthetic(n=400, seed=0):
@@ -70,6 +71,43 @@ class MetricsTest(unittest.TestCase):
         for _, r in out.iterrows():
             self.assertEqual(r["confirm_n_error"], r["n_error"])
             self.assertAlmostEqual(r["confirm_miss_rate"], r["miss_rate"])
+
+    def test_flagged_slices_match_the_table(self):
+        df, pred = synthetic()
+        tab = slice_table(df, pred, min_size=10, min_errors=10, max_order=2, include_categories=True)
+        flagged = flagged_slices(df, pred, min_size=10, min_errors=10, max_order=2, include_categories=True)
+        self.assertEqual(flagged, set(tab.loc[tab["z_miss"] >= 2, "slice"]))
+        self.assertIn("environment_id=2", flagged)
+        self.assertNotIn("environment_id=1", flagged)
+
+    def test_a_real_effect_is_flagged_by_every_run(self):
+        # same steps, a second "run" with fresh noise: the kitchen-2 effect is real, so both runs flag it
+        df, pred_a = synthetic(seed=0)
+        rng = np.random.default_rng(1)
+        miss_p = np.where(df["environment_id"] == 2, 0.8, 0.2)
+        pred_b = pd.Series(np.where(df["has_errors"], rng.random(len(df)) > miss_p, rng.random(len(df)) < 0.1),
+                           index=df.index)
+        for pred in (pred_a, pred_b):
+            flagged = flagged_slices(df, pred, max_order=1, include_categories=False)
+            self.assertIn("environment_id=2", flagged)
+            self.assertNotIn("environment_id=1", flagged)
+
+    def test_seed_config(self):
+        self.assertEqual(seed_config("omnivore_mlp_video_step_lr1e-4-s2"), "omnivore_mlp_video_step_lr1e-4")
+        self.assertEqual(seed_config("omnivore_mlp_video_step_lr1e-4"), "omnivore_mlp_video_step_lr1e-4")
+        self.assertEqual(seed_config("omnivore_mlp_video_step_lr1e-4-center"), "omnivore_mlp_video_step_lr1e-4-center")
+        self.assertEqual(seed_config("paper_omnivore_mlp_video_step"), "paper_omnivore_mlp_video_step")
+
+    def test_stability_columns(self):
+        runs = {"a": {"k2", "p2"}, "a-s1": {"p2"}, "a-s2": {"p2", "x"}}
+        others = {"b": {"p2"}, "c": set(), "d": {"k2", "p2"}}
+        st = stability_columns(["p2", "k2", "none"], runs, others)
+        self.assertEqual(list(st["seed_k"]), [3, 1, 0])
+        self.assertEqual(list(st["seed_n"]), [3, 3, 3])
+        self.assertEqual(list(st["model_k"]), [2, 1, 0])
+        self.assertEqual(list(st["model_n"]), [3, 3, 3])
+        self.assertEqual(st.loc[1, "model_by"], ["d"])
+        self.assertEqual(len(stability_columns([], runs, others)), 0)
 
 
 if __name__ == "__main__":

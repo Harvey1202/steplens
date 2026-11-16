@@ -23,7 +23,8 @@ steplens/          python package
   features.py      per-recording feature loader (official file layout)
   models.py        MLP and transformer heads ported from error_recognition
   train.py         training/eval, writes data/predictions/<model_id>/
-  metrics.py       step metrics, per-category recall, slice discovery
+  metrics.py       step metrics, per-category recall, slice discovery and slice stability
+  embedding.py     per-step mean features -> UMAP + nearest-neighbour statistics for the embedding view
   server.py        FastAPI backend + static front end
 frontend/          index.html, styles.css, app.js, views.js (D3 v7 from cdnjs, no build step)
 scripts/           download_features.sh, download_videos.sh
@@ -135,6 +136,27 @@ or one custom threshold for all models.
 
 Optional videos for the timeline view: `scripts/download_videos.sh 16_27 25_48`
 (360p GoPro, ~100 MB per 10-minute recording).
+
+**Slice stability.** Next to the hold-out column, the slice table shows for every slice in
+how many runs of model A's configuration (*seeds*, e.g. 3/3) and in how many other models
+on the same split (*models*, e.g. 7/19, the authors' checkpoints included) the same slice is
+flagged: miss rate above that model's own overall rate with z ≥ 2, each model at its own
+threshold under the current operating-point rule. Hover a cell to see which models; sort
+by *flagged by the most other models* to put the slices that do not depend on one run first.
+
+**Step-feature embedding (UMAP).** The embedding card plots every step from the mean of its
+frozen segment features, colored by model A's outcome, person, kitchen or recipe, and lists
+how often a step's nearest neighbours in feature space share its recording, person,
+kitchen, recipe, error label and outcome, against chance. It needs a small file computed
+once from the features (data/features, see Setup; `pip install umap-learn`):
+
+```bash
+.venv/bin/python -m steplens.embedding --backbone omnivore                      # ~1 min after loading features
+.venv/bin/python -m steplens.embedding --backbone omnivore --center recording    # optional: recording mean removed
+```
+
+This writes `data/processed/embedding_omnivore.{parquet,json}` (about 100 KB, read by the
+tool, so it can be committed and viewed without the features) and `docs/embedding_omnivore.md`.
 
 ## Notes on the data
 

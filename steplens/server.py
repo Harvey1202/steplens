@@ -8,6 +8,7 @@ discovery, and the static front end.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -16,11 +17,14 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
+from .calibrate import best_threshold
 from .data import CATEGORIES, CAT_KEYS, load_tables
-from .metrics import SLICE_ATTRS, binary_metrics, confirm_slices, normalize_scores, per_category, slice_table
+from .metrics import (SLICE_ATTRS, binary_metrics, confirm_slices, flagged_slices, normalize_scores, per_category,
+                      seed_config, slice_table, stability_columns)
 
 ROOT = Path(__file__).resolve().parents[1]
 PRED = ROOT / "data" / "predictions"
+EMBED_DIR = ROOT / "data" / "processed"   # embedding_<name>.{parquet,json} from python -m steplens.embedding
 VIDEOS = ROOT / "data" / "videos"
 FRONTEND = ROOT / "frontend"
 
@@ -41,6 +45,8 @@ class Store:
         self.recordings, self.steps, self.segments, self.graphs = load_tables()
         self.steps = self.steps.set_index("step_key", drop=False)
         self.models: dict[str, dict] = {}
+        self.thresholds: dict[tuple, float] = {}   # (model, mtime, rule, norm) -> threshold chosen on val
+        self.flags: dict[tuple, set] = {}          # (model, mtime, phase, threshold, slice settings) -> flagged slices
         self.refresh_models()
 
     def refresh_models(self):
@@ -157,7 +163,7 @@ def models():
             model_id=mid, backbone=meta["backbone"], variant=meta["variant"], modality=meta["modality"],
             split=meta["split"], split_col=meta["split_col"], segment_len=meta.get("segment_len", 1),
             best_epoch=meta["best_epoch"], n_steps=meta["n_steps"], metrics=meta["metrics"], history=hist,
-            tag=meta.get("args", {}).get("tag", ""),
+            tag=meta.get("args", {}).get("tag", ""), seed=meta.get("args", {}).get("seed"),
             label=f"{meta['backbone']} {meta['variant']}" + (
                 f" ({'+'.join(meta['modality'])})" if meta["backbone"] == "imagebind" else "") + f" · {meta['split']}" + (
                 f" · {meta['args']['tag']}" if meta.get("args", {}).get("tag") else ""),
@@ -185,6 +191,79 @@ def _pred(df: pd.DataFrame, threshold: float, norm: bool) -> pd.Series:
     return df[col] > threshold
 
 
+OP_RULES = ("balanced", "f1", "paper", "custom")
+
+
+def model_threshold(model_id: str, rule: str, norm: bool, threshold: float) -> float:
+    """The threshold a model gets under an operating-point rule, computed as the front end does.
+
+    balanced / f1: best TPR − FPR or F1 on the model's own validation steps (0.01 grid);
+    paper: 0.6 on step splits, 0.4 otherwise (on normalized scores); custom: ``threshold`` for every model.
+    """
+    if rule not in ("balanced", "f1", "paper"):
+        return threshold
+    m = store.model(model_id)
+    if rule == "paper":
+        return 0.6 if m["meta"]["split"] in ("step", "step_random") else 0.4
+    key = (model_id, m["mtime"], rule, norm)
+    if key not in store.thresholds:
+        val = store.scored_steps(model_id, "val")
+        col = "score_norm" if norm else "score"
+        store.thresholds[key] = (best_threshold(val["has_errors"].values.astype(bool), val[col].values, rule)
+                                 if len(val) else threshold)
+    return store.thresholds[key]
+
+
+def _subset(model_id: str, phase: str, category: str | None, activity_id=None, person_id=None,
+            environment_id=None) -> pd.DataFrame:
+    """One model's scored steps in a phase, restricted to the slice table's filters."""
+    df = store.scored_steps(model_id, phase)
+    if category:
+        df = df[~df["has_errors"] | df[f"err_{category}"].astype(bool)]
+    if activity_id:
+        df = df[df["activity_id"].isin(activity_id)]
+    if person_id:
+        df = df[df["person_id"].isin(person_id)]
+    if environment_id:
+        df = df[df["environment_id"].isin(environment_id)]
+    return df
+
+
+def _flagged(model_id: str, phase: str, threshold: float, norm: bool, filters: tuple, min_size: int,
+             min_errors: int, max_order: int, categories: bool) -> set[str]:
+    """Slices this model flags (z_miss >= 2) at ``threshold`` on the filtered steps of ``phase``; cached."""
+    m = store.model(model_id)
+    key = (model_id, m["mtime"], phase, round(float(threshold), 6), norm, filters, min_size, min_errors, max_order,
+           categories)
+    if key not in store.flags:
+        if len(store.flags) > 20000:
+            store.flags.clear()
+        df = _subset(model_id, phase, *filters)
+        store.flags[key] = (flagged_slices(df, _pred(df, threshold, norm), min_size=min_size, min_errors=min_errors,
+                                           max_order=max_order, include_categories=categories) if len(df) else set())
+    return store.flags[key]
+
+
+def stability_models(model_id: str) -> tuple[list[str], list[str]]:
+    """(runs of model A's configuration incl. A, one run of every other configuration on A's split).
+
+    Derived models (``_cal-``) are left out of the comparison set; for another configuration the run
+    without a seed suffix is preferred.
+    """
+    split = store.model(model_id)["meta"]["split"]
+    same = sorted(mid for mid, m in store.models.items() if m["meta"]["split"] == split and "_cal-" not in mid)
+    cfg = seed_config(model_id)
+    runs = [mid for mid in same if seed_config(mid) == cfg]
+    if model_id not in runs:
+        runs = [model_id] + runs
+    others: dict[str, str] = {}
+    for mid in same:
+        c = seed_config(mid)
+        if c != cfg and (c not in others or mid == c):
+            others[c] = mid
+    return runs, sorted(others.values())
+
+
 @app.get("/api/metrics")
 def metrics(model_id: str, phase: str = "test", threshold: float = 0.5, norm: bool = False):
     df = store.scored_steps(model_id, phase)
@@ -200,42 +279,76 @@ def slices(model_id: str, phase: str = "test", threshold: float = 0.5, norm: boo
            min_size: int = 10, min_errors: int = 10, max_order: int = 2, categories: bool = True, limit: int = 400,
            sort: str = "z_miss", activity_id: list[int] | None = Query(None),
            person_id: list[int] | None = Query(None), environment_id: list[int] | None = Query(None),
-           category: str | None = None, confirm: str | None = None):
-    """Slices found on `phase`; with `confirm=<phase>` each slice is re-evaluated on that hold-out phase."""
+           category: str | None = None, confirm: str | None = None, rule: str = "custom", stability: bool = False):
+    """Slices found on `phase`; with `confirm=<phase>` each slice is re-evaluated on that hold-out phase.
+
+    With ``stability=true`` every slice also gets ``seed_k/seed_n`` (in how many runs of model A's
+    configuration it is flagged, A included) and ``model_k/model_n`` (in how many other models on the
+    same split it is flagged), each model at its own threshold under the operating-point ``rule``.
+    A slice is flagged when its miss rate is above the model's overall miss rate with z >= 2.
+    """
     if category and category not in CAT_KEYS:
         raise HTTPException(400, f"unknown category {category}")
+    if rule not in OP_RULES:
+        raise HTTPException(400, f"unknown operating-point rule {rule}")
+    filters = (category, tuple(activity_id or ()), tuple(person_id or ()), tuple(environment_id or ()))
 
-    def subset(ph: str) -> pd.DataFrame:
-        df = store.scored_steps(model_id, ph)
-        if category:
-            df = df[~df["has_errors"] | df[f"err_{category}"].astype(bool)]
-        if activity_id:
-            df = df[df["activity_id"].isin(activity_id)]
-        if person_id:
-            df = df[df["person_id"].isin(person_id)]
-        if environment_id:
-            df = df[df["environment_id"].isin(environment_id)]
-        return df
-
-    df = subset(phase)
+    df = _subset(model_id, phase, *filters)
     if df.empty:
         return dict(overall={}, slices=[], n_slices=0)
     pred = _pred(df, threshold, norm)
     tab = slice_table(df, pred, min_size=min_size, max_order=max_order, include_categories=categories,
                       min_errors=min_errors, scores=df["score_norm" if norm else "score"])
     confirm_overall = None
+    runs, others = [], []
+    if len(tab) and stability:
+        runs, others = stability_models(model_id)
+
+        def flags(mid: str) -> set[str]:
+            t = threshold if mid == model_id else model_threshold(mid, rule, norm, threshold)
+            return _flagged(mid, phase, t, norm, filters, min_size, min_errors, max_order, categories)
+
+        st = stability_columns(tab["slice"], {r: flags(r) for r in runs}, {m: flags(m) for m in others})
+        tab = pd.concat([tab.reset_index(drop=True), st], axis=1)
     if len(tab):
-        if sort not in tab.columns:
+        if sort == "model_k" and "model_k" in tab.columns:
+            tab = tab.sort_values(["model_k", "seed_k", "z_miss"], ascending=False, na_position="last").head(limit)
+        elif sort not in tab.columns:
             raise HTTPException(400, f"unknown sort column {sort}")
-        asc = sort in ("recall_lift", "recall")
-        tab = tab.sort_values(sort, ascending=asc, na_position="last").head(limit)
+        else:
+            asc = sort in ("recall_lift", "recall")
+            tab = tab.sort_values(sort, ascending=asc, na_position="last").head(limit)
         if confirm and confirm != phase:
-            dfc = subset(confirm)
+            dfc = _subset(model_id, confirm, *filters)
             if not dfc.empty:
                 tab, confirm_overall = confirm_slices(dfc, _pred(dfc, threshold, norm), tab)
     overall = binary_metrics(df["has_errors"].values, df["score_norm" if norm else "score"].values, threshold)
     return dict(overall=overall, n_slices=int(len(tab)), confirm=confirm, confirm_overall_miss=confirm_overall,
+                stability=dict(seed_runs=runs, models=others) if stability else None,
                 slices=json.loads(tab.to_json(orient="records")))
+
+
+@app.get("/api/embeddings")
+def embeddings():
+    """Available step-feature embeddings with their settings and neighbour statistics."""
+    out = []
+    for p in sorted(EMBED_DIR.glob("embedding_*.json")):
+        if p.with_suffix(".parquet").exists():
+            out.append(json.load(open(p)))
+    return out
+
+
+@app.get("/api/embedding/{name}")
+def embedding(name: str):
+    """2-D coordinates (step_key, x, y) of one embedding."""
+    if not re.fullmatch(r"[A-Za-z0-9_.+-]+", name):
+        raise HTTPException(400, "bad embedding name")
+    p = EMBED_DIR / f"embedding_{name}.parquet"
+    if not p.exists():
+        raise HTTPException(404, f"no embedding {name}; run python -m steplens.embedding")
+    df = pd.read_parquet(p)
+    df[["x", "y"]] = df[["x", "y"]].round(4)
+    return _json(df)
 
 
 @app.get("/api/compare")
