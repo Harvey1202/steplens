@@ -1,0 +1,120 @@
+{
+ "name": "omnivore-center",
+ "backbone": "omnivore",
+ "modality": [
+  "video"
+ ],
+ "center": "recording",
+ "n_steps": 5333,
+ "feature_dims": 1024,
+ "pca_dims": 50,
+ "k": 10,
+ "umap": {
+  "n_neighbors": 15,
+  "min_dist": 0.1,
+  "seed": 0
+ },
+ "created": "2026-11-16",
+ "neighbours": [
+  {
+   "key": "recording_id",
+   "label": "recording",
+   "n": 5333,
+   "k": 10,
+   "agreement": 0.052953309581848865,
+   "chance": 0.0026644107117159937,
+   "lift": 19.874304418985272
+  },
+  {
+   "key": "person_id",
+   "label": "person",
+   "n": 5333,
+   "k": 10,
+   "agreement": 0.24640915057191073,
+   "chance": 0.13301740961210676,
+   "lift": 1.8524578947257102
+  },
+  {
+   "key": "environment_id",
+   "label": "kitchen",
+   "n": 5333,
+   "k": 10,
+   "agreement": 0.33667729233077065,
+   "chance": 0.15266583850162804,
+   "lift": 2.2053217382170294
+  },
+  {
+   "key": "activity_id",
+   "label": "recipe",
+   "n": 5333,
+   "k": 10,
+   "agreement": 0.3003187699231202,
+   "chance": 0.045202070253171765,
+   "lift": 6.64391626846001
+  },
+  {
+   "key": "recipe_step",
+   "label": "recipe step",
+   "n": 5333,
+   "k": 10,
+   "agreement": 0.16990436902306394,
+   "chance": 0.002695779889093781,
+   "lift": 63.02605405969526
+  },
+  {
+   "key": "has_errors",
+   "label": "has an error",
+   "n": 5333,
+   "k": 10,
+   "agreement": 0.5860303768985562,
+   "chance": 0.5712996784729654,
+   "lift": 1.0257845382741413
+  }
+ ],
+ "outcomes": [
+  {
+   "model_id": "omnivore_mlp_video_step_lr1e-4",
+   "phase": "test",
+   "threshold": 0.07,
+   "missed_rate": 0.2619047619047619,
+   "n": 252,
+   "k": 10,
+   "agreement": 0.6734126984126985,
+   "chance": 0.6118383608423449,
+   "lift": 1.1006382428940569
+  },
+  {
+   "model_id": "omnivore_transformer_video_step_lr1e-5",
+   "phase": "test",
+   "threshold": 0.01,
+   "missed_rate": 0.12301587301587301,
+   "n": 252,
+   "k": 10,
+   "agreement": 0.8353174603174603,
+   "chance": 0.7833744387529248,
+   "lift": 1.0663067608476287
+  },
+  {
+   "model_id": "paper_omnivore_transformer_video_step",
+   "phase": "test",
+   "threshold": 0.27,
+   "missed_rate": 0.1746031746031746,
+   "n": 252,
+   "k": 10,
+   "agreement": 0.7376984126984127,
+   "chance": 0.7106178460760134,
+   "lift": 1.0381084809112753
+  },
+  {
+   "model_id": "omnivore_transformer_video_recordings",
+   "phase": "test",
+   "threshold": 0.01,
+   "missed_rate": 0.256198347107438,
+   "n": 242,
+   "k": 10,
+   "agreement": 0.6326446280991735,
+   "chance": 0.6172970748602585,
+   "lift": 1.0248625076384645
+  }
+ ]
+}

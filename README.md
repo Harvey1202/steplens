@@ -109,7 +109,8 @@ score every step with one of them and show it in the tool next to our models:
 .venv/bin/python -m steplens.calibrate --model omnivore_mlp_video_step_lr1e-4 --by environment_id
     # per-kitchen thresholds tuned on val, evaluated on test; writes <model>_cal-environment/ as a derived model
 .venv/bin/python scripts/results_table.py      # docs/results.md: every model vs the paper's numbers
-.venv/bin/python scripts/slice_survival.py     # docs/slice_survival.md: how often flagged slices survive on test
+.venv/bin/python scripts/slice_survival.py     # docs/slice_survival.md + docs/figures/slice_survival.png: how often flagged slices survive on test
+.venv/bin/python scripts/split_positions.py    # docs/figures/split_positions.png: where each phase's steps sit in the recipe
 .venv/bin/python -m unittest discover -s tests # metric and slice-discovery tests
 ```
 
@@ -157,6 +158,8 @@ once from the features (data/features, see Setup; `pip install umap-learn`):
 
 This writes `data/processed/embedding_omnivore.{parquet,json}` (about 100 KB, read by the
 tool, so it can be committed and viewed without the features) and `docs/embedding_omnivore.md`.
+The repository already includes both results (`omnivore` and `omnivore-center`), so the view
+works out of the box.
 
 ## Notes on the data
 
