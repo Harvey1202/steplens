@@ -111,6 +111,7 @@ score every step with one of them and show it in the tool next to our models:
 .venv/bin/python scripts/results_table.py      # docs/results.md: every model vs the paper's numbers
 .venv/bin/python scripts/slice_survival.py     # docs/slice_survival.md + docs/figures/slice_survival.png: how often flagged slices survive on test
 .venv/bin/python scripts/split_positions.py    # docs/figures/split_positions.png: where each phase's steps sit in the recipe
+.venv/bin/python scripts/embedding_figure.py   # docs/figures/umap_kitchen_outcome.png: UMAP by kitchen and by outcome
 .venv/bin/python -m unittest discover -s tests # metric and slice-discovery tests
 ```
 
@@ -121,6 +122,27 @@ consent, reference findings, baseline notebook + CSVs; designed, not run).
 
 License note: the dataset is released under Apache 2.0 (website, downloader and
 error_recognition repos; the annotations README says the same, its LICENSE file is MIT).
+
+## Reproducing the figures
+
+Figures made by scripts (run from the repository root; they write to `docs/figures/`):
+
+| Figure | Command |
+| --- | --- |
+| `split_positions.png` (position of each phase's steps in the recipe) | `python scripts/split_positions.py` |
+| `slice_survival.png` (flagged slices re-checked on test) | `python scripts/slice_survival.py` |
+| `umap_kitchen_outcome.png` (UMAP by kitchen and by outcome) | `python -m steplens.embedding --backbone omnivore` (once, needs the features), then `python scripts/embedding_figure.py` |
+
+Screenshots of the tool: start it (`uvicorn steplens.server:app --port 8781`), open the URL
+(after `http://127.0.0.1:8781/`) in a 1500 × 1000 window at 2× pixel density, and capture the element:
+
+| Screenshot | URL | Element |
+| --- | --- | --- |
+| Overview | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | top 960 px, matrix scrolled so model A's column is third |
+| Task graph | `?modelA=omnivore_mlp_video_step_random_lr1e-4&rule=balanced&theme=light&activity_id=25` | the task graph |
+| Slice stability | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | slice table header + first 7 rows |
+| Compare strip | `?modelA=omnivore_mlp_video_step_lr1e-4&modelB=slowfast_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the compare strip |
+| Timeline | `?modelA=omnivore_transformer_video_recordings&rule=balanced&theme=light&recording=25_40&person_id=2` | the timeline card down to its legend |
 
 ## Run the tool
 

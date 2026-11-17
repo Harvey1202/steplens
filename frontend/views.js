@@ -595,7 +595,7 @@ function drawTimeline(rid, segs, secA, secB) {
   const gt = svg.append('g');
   svg.append('text').attr('class', 'axis').attr('x', ml - 6).attr('y', gtY + gtH / 2 + 4).attr('text-anchor', 'end').text('steps');
   svg.append('text').attr('class', 'axis').attr('x', ml - 6).attr('y', outY + outH).attr('text-anchor', 'end').text('A');
-  svg.append('text').attr('class', 'axis').attr('x', ml - 6).attr('y', scY + 4).attr('text-anchor', 'end').text('score');
+  svg.append('text').attr('class', 'axis').attr('transform', `translate(10, ${scY + scH / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('score');
   for (const sg of performed) {
     const s = stepOf(sg.step_key), p = predOf(state.modelA, sg.step_key);
     const k = tagKey(s), fill = k ? catColor(k) : cssVar('--normal-fill');

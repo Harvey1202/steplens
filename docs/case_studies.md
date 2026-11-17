@@ -8,10 +8,11 @@ the clip. Thresholds are each model's balanced operating point on its validation
 
 Model: `omnivore_transformer_video_recordings` (Omnivore features, transformer head,
 official recipe, recording split). Recording 25_40 is one of the 48 held-out recordings,
-so the model never saw this cook, kitchen or recording during training.
+so the model never saw this session during training. (It has seen other recordings of the
+same cook and kitchen: the recording split holds out recordings, not people.)
 [open in StepLens](http://127.0.0.1:8781/?modelA=omnivore_transformer_video_recordings&recording=25_40&person_id=2)
 
-The recording has 10 error steps. The model catches 4 and misses 6, and raises 5 false
+The recording has 10 error steps. The model catches 5 and misses 5, and raises 5 false
 alarms on the 9 normal steps:
 
 | Time | Step | Error | Score | Outcome |
@@ -31,8 +32,8 @@ What the video shows is consistent with the scores: the misses are quantity and 
 deviations that leave the frames looking like a normal step (a tablespoon of salt looks
 like a teaspoon at 360p; 1.5 minutes of cooking looks like 2), while the catches involve
 a visible event (dropping cubes, a burner knob) or a long step. Note that even the
-"catches" are weak: the model's balanced threshold is 0.01 and its scores on this
-recording never exceed 0.09, so the per-second track in the timeline is nearly flat and
+"catches" are weak: the model's balanced threshold is 0.01 and its highest step score on
+this recording is 0.094, so the per-second track in the timeline is nearly flat and
 the decisions rest on tiny differences.
 
 Person 2 is not an accident of this recording. Across every split and head we trained,
