@@ -1,6 +1,6 @@
 // StepLens views: performance matrix, compare strip, slice table, task graph, timeline.
 import { state, $, stepsFor, predOf, isPos, inPhase, scoreOf, outcome, metricsOf, matchesFilters,
-  catNameOf, activityName, fmtPct, fmtTime, api, setFilters, setModelA, thresholdFor, RULE_LABEL } from './app.js';
+  catNameOf, activityName, fmtPct, fmtTime, api, setFilters, setModelA, thresholdFor, RULE_LABEL, update } from './app.js';
 
 // ---------------------------------------------------------------- color
 const RAMP = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
@@ -66,7 +66,22 @@ export function renderMatrix() {
   box.replaceChildren();
   if (!state.models.length) { box.appendChild(el('div', { class: 'empty' }, 'No trained models found in data/predictions.')); return; }
   const keys = state.meta.category_keys, names = state.meta.categories;
-  const perModel = state.models.map((m) => ({ m, items: stepsFor(m.model_id) }));
+  // Columns: model A, model B, A's other training seeds, the authors' checkpoints on A's split, then (when expanded) the rest.
+  // The short list keeps the matrix readable; "show all" brings back every model.
+  const A = state.modelById.get(state.modelA) || state.models[0];
+  const seedBase = (id) => id.replace(/-s\d+$/, '');
+  const rank = (m) => (m.model_id === A.model_id ? 0 : m.model_id === state.modelB ? 1
+    : seedBase(m.model_id) === seedBase(A.model_id) ? 2 : m.model_id.startsWith('paper_') && m.split === A.split ? 3 : 4);
+  const ranked = state.models.map((m, i) => [m, i, rank(m)]).sort((x, y) => x[2] - y[2] || x[1] - y[1]);
+  const nMain = ranked.filter((r) => r[2] < 4).length;
+  const ordered = ranked.filter((r) => state.matrixAll || r[2] < 4).map(([m]) => m);
+  const scope = $('matrixScope');
+  if (scope) {
+    const toggle = el('button', { type: 'button', class: 'ghost' }, state.matrixAll ? `show the ${nMain} main models` : `show all ${state.models.length} models`);
+    toggle.addEventListener('click', () => { state.matrixAll = !state.matrixAll; update(); });
+    scope.replaceChildren(document.createTextNode(state.matrixAll ? `All ${state.models.length} models · ` : `${nMain} of ${state.models.length} models: A${state.modelB ? ', B' : ''}, its training seeds, the authors' checkpoints · `), toggle);
+  }
+  const perModel = ordered.map((m) => ({ m, items: stepsFor(m.model_id) }));
 
   const table = el('table', { class: 'matrix' });
   const thead = el('thead'), hr = el('tr');
@@ -335,6 +350,13 @@ export async function renderEmbedding() {
 
 // ---------------------------------------------------------------- slices
 const modelLabel =(id) => (state.modelById.get(id) || {}).label || id;
+// Slice names come from the server as "environment_id=2 & category=Order Error"; show them in the
+// same words as the filter chips ("kitchen 2 & Order Error"). The raw name stays in the tooltip.
+const SLICE_WORDS = { environment_id: 'kitchen ', person_id: 'person ', activity_name: 'recipe: ', duration_bucket: 'duration ', position_bucket: 'position ', category: '' };
+const sliceLabel = (s) => String(s).split(' & ').map((p) => {
+  const i = p.indexOf('='); const k = p.slice(0, i);
+  return i > 0 && k in SLICE_WORDS ? SLICE_WORDS[k] + p.slice(i + 1) : p;
+}).join(' & ');
 const seedLabel = (id) => { const m = state.modelById.get(id); return m && m.seed != null ? `seed ${m.seed}` : id; };
 
 /** Dots for the runs of model A's configuration that flag this slice (●) or not (○). */
@@ -389,14 +411,15 @@ export async function renderSlices() {
   const stabNote = stab.models.length || stab.seed_runs.length > 1
     ? ` Seeds / models = in how many runs of this configuration (${stab.seed_runs.length}) and in how many other models on the ${split} split (${stab.models.length}, the authors' checkpoints included) the same slice is also flagged: miss rate above that model's own overall rate with z ≥ 2, each at its own threshold (${RULE_LABEL[state.opRule]}). A slice flagged by one run only is a hypothesis, not a finding.`
     : '';
-  box.appendChild(el('div', { class: 'legend' }, `Overall on this selection: miss rate ${fmtPct(1 - (o.recall ?? NaN))} (${(o.n_error ?? 0) - (o.tp ?? 0)} of ${o.n_error ?? 0} errors), false-alarm rate ${fmtPct(o.false_alarm)}. ${data.n_slices ?? 0} slices shown; brackets are 95% Wilson intervals.${confirmNote}${stabNote}`));
+  box.appendChild(el('div', { class: 'legend slice-note' }, `Overall on this selection: miss rate ${fmtPct(1 - (o.recall ?? NaN))} (${(o.n_error ?? 0) - (o.tp ?? 0)} of ${o.n_error ?? 0} errors), false-alarm rate ${fmtPct(o.false_alarm)}. ${data.n_slices ?? 0} slices shown; brackets are 95% Wilson intervals.${confirmNote}${stabNote}`));
   const table = el('table'), thead = el('thead'), tr = el('tr');
   for (const [t, cls, title] of [['Slice', ''], ['errors', 'num'], ['missed', 'num'], ['miss rate', 'num'], ['Δ vs overall', 'num'], ['z', 'num'], ['hold-out', 'num', 'same slice on the hold-out phase; ✓ = also above the overall miss rate there'], ['seeds', 'num', 'in how many runs of this model configuration (different training seeds) the slice is flagged (z ≥ 2)'], ['models', 'num', 'in how many other models on the same split the slice is flagged (z ≥ 2), each at its own threshold'], ['AUC', 'num', 'error-vs-normal AUC inside the slice: low means the model cannot separate them there, high with a high miss rate means its scores are just shifted'], ['false alarm', 'num'], ['Δ', 'num']]) { const th = el('th', { class: cls }, t); if (title) th.title = title; tr.appendChild(th); }
   thead.appendChild(tr); table.appendChild(thead);
   const tbody = el('tbody');
   for (const r of data.slices || []) {
     const row = el('tr', { class: 'clickable' });
-    row.appendChild(el('td', { style: 'white-space:normal' }, r.slice));
+    const name = el('td', { style: 'white-space:normal' }, sliceLabel(r.slice)); name.title = r.slice;
+    row.appendChild(name);
     row.appendChild(el('td', { class: 'num' }, String(r.n_error)));
     row.appendChild(el('td', { class: 'num' }, String(r.n_missed ?? Math.round((r.miss_rate ?? 0) * r.n_error))));
     row.appendChild(el('td', { class: 'num' }, fmtPct(r.miss_rate) + ci(r.miss_lo, r.miss_hi)));
@@ -559,6 +582,8 @@ export async function renderTimeline() {
   const rid = state.recording, token = ++timelineToken;
   const [segs, secA, secB] = await Promise.all([api.fetchSegments(rid), api.fetchSeconds(state.modelA, rid), state.modelB ? api.fetchSeconds(state.modelB, rid) : null]);
   if (token !== timelineToken) return; // superseded
+  // set the two-column layout before drawing, so the timeline is drawn at its final width
+  $('videoBox').parentElement.classList.toggle('has-video', state.meta.videos.includes(rid));
   drawTimeline(rid, segs, secA, secB);
   renderVideo(rid);
   renderDetail();
@@ -583,10 +608,10 @@ function drawTimeline(rid, segs, secA, secB) {
   const steps = state.steps.filter((s) => s.recording_id === rid);
   const performed = segs.filter((s) => !s.is_missing);
   const W = Math.max(600, box.clientWidth || 1100), ml = 44, mr = 16;
-  const gtY = 14, gtH = 22, outY = gtY + gtH + 4, outH = 8, scY = outY + outH + 14, scH = 130, axisY = scY + scH + 6, H = axisY + 26;
+  const gtY = 14, gtH = 22, outY = gtY + gtH + 4, outH = 14, scY = outY + outH + 14, scH = 130, axisY = scY + scH + 6, H = axisY + 26;
   const dur = Math.max(d3.max(performed, (s) => s.end_time) || 0, d3.max(Object.values(secA.seconds), (a) => a.length) * (secA.segment_len || 1) || 0);
   const x = d3.scaleLinear().domain([0, dur]).range([ml, W - mr]);
-  const y = d3.scaleLinear().domain([0, 1]).range([scY + scH, scY]);
+  const y = d3.scaleLinear().range([scY + scH, scY]);  // domain set below from this recording's scores
   const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('width', W).attr('height', H);
 
   // ground truth track
@@ -602,7 +627,7 @@ function drawTimeline(rid, segs, secA, secB) {
     const x0 = x(sg.start_time) + 1, w = Math.max(2, x(sg.end_time) - x(sg.start_time) - 2);
     const inP = p && inPhase(p);
     const r = gt.append('rect').attr('x', x0).attr('y', gtY).attr('width', w).attr('height', gtH).attr('rx', 3).attr('fill', fill).attr('opacity', inP ? 1 : 0.45).style('cursor', 'pointer')
-      .attr('stroke', state.selectedStep === sg.step_key ? 'var(--ink)' : 'none').attr('stroke-width', 2);
+      .attr('stroke', state.selectedStep === sg.step_key ? 'var(--ink)' : 'none').attr('stroke-width', 2).attr('data-step', sg.step_key);
     const short = s.step_description.split(' -')[0];
     if (w > short.length * 6.8 + 10) gt.append('text').attr('x', x0 + 6).attr('y', gtY + gtH / 2 + 4).attr('font-size', 11).attr('fill', k ? inkOn(fill) : 'var(--ink)').attr('pointer-events', 'none').text(short);
     r.on('pointermove', (e) => showTip(e, s.step_description, [
@@ -612,18 +637,34 @@ function drawTimeline(rid, segs, secA, secB) {
     ], s.has_errors ? '' : 'normal step')).on('pointerleave', hideTip).on('click', () => selectStep(sg.step_key, sg.start_time));
     if (inP) {
       const o = outcome(s, isPos(p, state.modelA));
-      if (o !== 'TN') gt.append('rect').attr('x', x0).attr('y', outY).attr('width', w).attr('height', outH).attr('rx', 2).attr('fill', OUTCOME[o].color()).style('cursor', 'pointer')
-        .on('pointermove', (e) => showTip(e, `${OUTCOME[o].icon} ${OUTCOME[o].label}`, [{ label: 'step', value: short }, { label: 'score', value: scoreOf(p).toFixed(3) }])).on('pointerleave', hideTip).on('click', () => selectStep(sg.step_key, sg.start_time));
+      if (o !== 'TN') {
+        // The outcome row shares hues with some error categories (red, orange, green), so each mark also carries its icon.
+        const oFill = OUTCOME[o].color();
+        const og = gt.append('g').style('cursor', 'pointer')
+          .on('pointermove', (e) => showTip(e, `${OUTCOME[o].icon} ${OUTCOME[o].label}`, [{ label: 'step', value: short }, { label: 'score', value: scoreOf(p).toFixed(3) }])).on('pointerleave', hideTip).on('click', () => selectStep(sg.step_key, sg.start_time));
+        og.append('rect').attr('x', x0).attr('y', outY).attr('width', w).attr('height', outH).attr('rx', 3).attr('fill', oFill);
+        if (w >= 12) og.append('text').attr('x', x0 + w / 2).attr('y', outY + outH / 2 + 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 700).attr('fill', inkOn(oFill)).attr('pointer-events', 'none').text(OUTCOME[o].icon);
+      }
     }
   }
-  // score area
-  for (const v of [0, 0.5, 1]) {
-    svg.append('line').attr('class', 'gridline').attr('x1', ml).attr('x2', W - mr).attr('y1', y(v)).attr('y2', y(v));
-    svg.append('text').attr('class', 'axis').attr('x', ml - 6).attr('y', y(v) + 4).attr('text-anchor', 'end').text(v.toFixed(1));
-  }
-  const line = d3.line().x((d) => x(d.t)).y((d) => y(d.v)).curve(d3.curveMonotoneX);
+  // score area: the axis fits this recording's scores (and thresholds), so low-scoring models do not draw a flat line at 0
   const series = [{ id: state.modelA, sec: secA, color: 'var(--model-a)', tag: 'A' }];
   if (secB) series.push({ id: state.modelB, sec: secB, color: 'var(--model-b)', tag: 'B' });
+  for (const sr of series) sr.pts = secondsPoints(segs, sr.sec);
+  const vals = [];
+  for (const sr of series) {
+    vals.push(thresholdFor(sr.id));
+    for (const seg of sr.pts) for (const pt of seg.points) vals.push(pt.v);
+    for (const sg of performed) { const p = predOf(sr.id, sg.step_key); if (p) vals.push(scoreOf(p)); }
+  }
+  y.domain([0, Math.min(1, Math.max(0.02, (d3.max(vals.filter(Number.isFinite)) || 1) * 1.1))]).nice(4);
+  if (y.domain()[1] > 1) y.domain([0, 1]);
+  const yFmt = y.tickFormat(4);
+  for (const v of y.ticks(4)) {
+    svg.append('line').attr('class', 'gridline').attr('x1', ml).attr('x2', W - mr).attr('y1', y(v)).attr('y2', y(v));
+    svg.append('text').attr('class', 'axis').attr('x', ml - 6).attr('y', y(v) + 4).attr('text-anchor', 'end').text(yFmt(v));
+  }
+  const line = d3.line().x((d) => x(d.t)).y((d) => y(d.v)).curve(d3.curveMonotoneX);
   for (const sr of series) {
     const thr = thresholdFor(sr.id);
     svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(thr)).attr('y2', y(thr)).attr('stroke', sr.color).attr('stroke-width', 1).attr('opacity', 0.7);
@@ -631,9 +672,7 @@ function drawTimeline(rid, segs, secA, secB) {
   }
   const lookup = [];
   for (const sr of series) {
-    const pts = secondsPoints(segs, sr.sec);
-    sr.pts = pts;
-    for (const seg of pts) svg.append('path').attr('d', line(seg.points)).attr('fill', 'none').attr('stroke', sr.color).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('opacity', sr.tag === 'A' ? 0.95 : 0.9);
+    for (const seg of sr.pts) svg.append('path').attr('d', line(seg.points)).attr('fill', 'none').attr('stroke', sr.color).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('opacity', sr.tag === 'A' ? 0.95 : 0.9);
     // step-level mean marks
     for (const sg of performed) {
       const p = predOf(sr.id, sg.step_key); if (!p) continue;
@@ -649,8 +688,16 @@ function drawTimeline(rid, segs, secA, secB) {
   svg.append('line').attr('class', 'hair').attr('x1', ml).attr('x2', W - mr).attr('y1', axisY).attr('y2', axisY);
   // crosshair
   const cross = svg.append('line').attr('class', 'hair').attr('y1', gtY).attr('y2', axisY).style('display', 'none');
-  svg.append('rect').attr('x', ml).attr('y', scY).attr('width', W - ml - mr).attr('height', scH).attr('fill', 'transparent')
+  // playhead: follows the video (or the last scrub position) and drives the step details
+  const head = svg.append('g').attr('class', 'playhead').attr('pointer-events', 'none').style('display', 'none');
+  head.append('line').attr('y1', gtY - 2).attr('y2', axisY).attr('stroke', 'var(--ink)').attr('stroke-width', 2);
+  head.append('text').attr('y', gtY - 4).attr('text-anchor', 'middle').attr('font-size', 10).attr('font-weight', 600).attr('fill', 'var(--ink)');
+  tl = { rid, x, dur, performed, head, lastT: tl.rid === rid ? tl.lastT : null };
+  const scrub = (e) => { const [mx] = d3.pointer(e, svg.node()); seekTo(Math.max(0, Math.min(dur, x.invert(mx)))); };
+  svg.append('rect').attr('x', ml).attr('y', scY).attr('width', W - ml - mr).attr('height', H - scY).attr('fill', 'transparent').style('cursor', 'ew-resize')
+    .on('pointerdown', (e) => { e.currentTarget.setPointerCapture(e.pointerId); scrub(e); })
     .on('pointermove', (e) => {
+      if (e.buttons & 1) scrub(e);
       const [mx] = d3.pointer(e); const t = x.invert(mx);
       cross.attr('x1', x(t)).attr('x2', x(t)).style('display', null);
       const sg = performed.find((s) => t >= s.start_time && t <= s.end_time);
@@ -664,6 +711,8 @@ function drawTimeline(rid, segs, secA, secB) {
       showTip(e, `${fmtTime(t)}${sg ? ` · ${stepOf(sg.step_key).step_description.split(' -')[0]}` : ''}`, rows);
     }).on('pointerleave', () => { cross.style('display', 'none'); hideTip(); });
   box.appendChild(svg.node());
+  const vid = currentVideo(rid);
+  if (vid && vid.readyState >= 1) syncToTime(vid.currentTime, false); else if (tl.lastT != null) syncToTime(tl.lastT, false);
   // legend
   const legend = el('div', { class: 'legend' });
   for (const [i, k] of state.meta.category_keys.entries()) { const s = el('span'); const key = el('span', { class: 'key' }); key.style.background = catColor(k); s.append(key, document.createTextNode(state.meta.categories[i])); legend.appendChild(s); }
@@ -679,6 +728,34 @@ function drawTimeline(rid, segs, secA, secB) {
   }
 }
 
+// ---------------------------------------------------------------- video <-> timeline link
+let tl = { rid: null, x: null, dur: 0, performed: [], head: null };
+const currentVideo = (rid) => { const v = $('videoBox').querySelector('video'); return v && (!rid || v.dataset.rid === rid) ? v : null; };
+
+// Move the playhead to time t and, when t falls inside another step, make that step the selected one
+// (details panel, highlight in the timeline and the UMAP) without redrawing the timeline.
+function syncToTime(t, follow = true) {
+  if (!tl.x || !Number.isFinite(t)) return;
+  tl.lastT = t;
+  const px = tl.x(t);
+  tl.head.style('display', null).select('line').attr('x1', px).attr('x2', px);
+  tl.head.select('text').attr('x', px).text(fmtTime(t));
+  if (!follow) return;
+  // between two annotated steps nothing is selected, so the details never describe a step the video has left
+  const key = (tl.performed.find((s) => t >= s.start_time && t < s.end_time) || {}).step_key || null;
+  if (key === state.selectedStep) { if (!key) renderDetail(); return; }  // refresh the time shown between steps
+  state.selectedStep = key;
+  renderDetail();
+  d3.selectAll('#timeline rect[data-step]').attr('stroke', function () { return this.dataset.step === key ? 'var(--ink)' : 'none'; });
+  renderEmbedding();
+}
+
+function seekTo(t) {
+  const v = currentVideo(tl.rid);
+  if (v) v.currentTime = t;
+  syncToTime(t);
+}
+
 function selectStep(key, start) {
   state.selectedStep = key;
   renderDetail();
@@ -692,7 +769,11 @@ function renderDetail() {
   const box = $('stepDetail');
   box.replaceChildren();
   const s = state.selectedStep ? state.stepByKey.get(state.selectedStep) : null;
-  if (!s) { box.appendChild(el('div', { class: 'empty' }, 'Click a step in the timeline to see its errors and scores.')); return; }
+  if (!s) {
+    const between = tl.lastT != null && tl.rid === state.recording;
+    box.appendChild(el('div', { class: 'empty' }, between ? `${fmtTime(tl.lastT)} · no annotated step at this moment (between steps).` : 'Click a step in the timeline, or drag across it, to see its errors and scores.'));
+    return;
+  }
   box.appendChild(el('h3', {}, s.step_description));
   box.appendChild(el('div', {}, `${s.activity_name} · recording ${s.recording_id} · person ${s.person_id} · kitchen ${s.environment_id} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)} (${Math.round(s.duration)} s, position ${s.position_idx + 1} of ${s.n_performed})`));
   if (s.has_errors) {
@@ -718,6 +799,13 @@ function renderVideo(rid) {
   box.replaceChildren();
   if (state.meta.videos.includes(rid)) {
     const v = document.createElement('video'); v.controls = true; v.preload = 'metadata'; v.src = `/videos/${rid}_360p.mp4`; v.dataset.rid = rid;
+    // keep the playhead and step details on the video's time: smooth while playing, and on every seek
+    let raf = 0;
+    const sync = (follow) => { if (tl.rid === rid) syncToTime(v.currentTime, follow); };
+    const loop = () => { sync(true); raf = v.paused || !v.isConnected ? 0 : requestAnimationFrame(loop); };
+    v.addEventListener('play', () => { if (!raf) raf = requestAnimationFrame(loop); });
+    v.addEventListener('seeked', () => sync(true));
+    v.addEventListener('loadedmetadata', () => sync(false));
     box.appendChild(v);
   } else box.appendChild(el('div', { class: 'nov' }, `No local 360p video for ${rid}. Run scripts/download_videos.sh ${rid} to fetch it (GoPro, ~1 MB per 10 s).`));
 }

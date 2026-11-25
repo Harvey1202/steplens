@@ -67,6 +67,8 @@
 html, body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 h2 { font-size: 15px; font-weight: 600; margin: 0; }
 p.hint { margin: 2px 0 0; color: var(--ink-2); font-size: 12.5px; }
+/* presentation mode (?present=1): drop the explanatory notes */
+.present p.hint, .present .slice-note, .present #embed .nb-note { display: none; }
 button { font: inherit; color: var(--ink); background: var(--surface-1); border: 1px solid var(--axis); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 button.ghost { border-color: transparent; color: var(--accent); padding-left: 0; }
 button:hover { border-color: var(--muted); }
@@ -149,12 +151,16 @@ td.stab .mini > span { display: block; height: 100%; background: var(--accent); 
 .node.selected rect { stroke: var(--ink); stroke-width: 2px; }
 .edge { fill: none; stroke: var(--axis); stroke-width: 1.5px; }
 #timeline svg { display: block; width: 100%; height: auto; }
-.timeline-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 480px); gap: 14px; margin-top: 10px; }
+/* timeline and step details on the left, video on the right; without a video the timeline takes the full width */
+.timeline-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.timeline-body.has-video { grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr); }
+.timeline-body #videoBox { order: 2; }  /* video sits right of the timeline (below it when there is no video) */
+.timeline-main #stepDetail { margin-top: 10px; }
 .detail { font-size: 13px; color: var(--ink-2); }
 .detail h3 { margin: 0 0 4px; font-size: 14px; color: var(--ink); font-weight: 600; }
 .detail .tag { display: inline-flex; align-items: center; gap: 6px; margin: 2px 8px 2px 0; }
 .detail ul { margin: 4px 0 0; padding-left: 18px; }
-.video video { width: 100%; max-height: 300px; background: #000; border-radius: 6px; }
+.video video { display: block; width: 100%; max-height: 480px; background: #000; border-radius: 6px; }
 .video .nov { color: var(--muted); font-size: 12.5px; }
 .tooltip { position: fixed; z-index: 20; pointer-events: none; background: var(--surface-1); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); max-width: 360px; white-space: normal; }
 .tooltip .t-title { font-weight: 600; margin-bottom: 3px; }
@@ -165,4 +171,4 @@ td.stab .mini > span { display: block; height: 100%; background: var(--accent); 
 .gridline { stroke: var(--grid); stroke-width: 1px; }
 text.axis { fill: var(--muted); font-size: 11px; }
 .empty { color: var(--muted); padding: 12px 0; }
-@media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } .timeline-bottom { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } .timeline-body.has-video { grid-template-columns: 1fr; } }

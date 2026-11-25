@@ -23,6 +23,7 @@ export const state = {
   sliceSort: 'z_miss',
   sliceCats: true,
   graphTable: false,
+  matrixAll: false,              // matrix shows every model instead of the short list around model A
   multiLabel: 'all',             // all | single: how the matrix counts steps with several error categories
   embeddings: [],                // [{name, backbone, neighbours, outcomes, ...}] from /api/embeddings
   embedName: '',
@@ -214,6 +215,7 @@ function initControls() {
   bind('fCategory', 'category'); bind('fDuration', 'duration_bucket'); bind('fPosition', 'position_bucket');
   $('reset').addEventListener('click', () => { for (const k in state.filters) state.filters[k] = ''; state.selectedStep = null; update(); });
   $('theme').addEventListener('change', (e) => { applyTheme(e.target.value); update(); });
+  $('mode').addEventListener('change', (e) => { document.documentElement.classList.toggle('present', e.target.value === '1'); writeUrlState(); });
   $('multiLabel').addEventListener('change', (e) => { state.multiLabel = e.target.value; V.renderMatrix(); });
   $('embedName').addEventListener('change', (e) => { state.embedName = e.target.value; writeUrlState(); V.renderEmbedding(); });
   $('embedColor').addEventListener('change', (e) => { state.embedColor = e.target.value; writeUrlState(); V.renderEmbedding(); });
@@ -270,10 +272,13 @@ function applyTheme(v) {
 }
 
 // URL parameters make a view shareable: ?modelA=..&modelB=..&phase=..&norm=1&threshold=0.3&activity_id=..&recording=..
+// present=1 is presentation mode: it hides the explanatory notes so the views read from a projector.
 const URL_KEYS = ['modelA', 'modelB', 'phase', 'norm', 'threshold', 'recording'];
 function readUrlState() {
   const q = new URLSearchParams(location.search);
   if (q.get('theme') !== null) applyTheme(q.get('theme'));
+  document.documentElement.classList.toggle('present', q.get('present') === '1');
+  $('mode').value = q.get('present') === '1' ? '1' : '';
   if (q.get('modelA') && state.modelById.has(q.get('modelA'))) state.modelA = q.get('modelA');
   if (q.get('modelB') && state.modelById.has(q.get('modelB'))) state.modelB = q.get('modelB');
   if (q.get('phase')) state.phase = q.get('phase');
@@ -281,6 +286,7 @@ function readUrlState() {
   if (q.get('rule') && q.get('rule') in RULE_LABEL) state.opRule = q.get('rule');
   if (q.get('threshold') !== null && Number.isFinite(+q.get('threshold'))) { state.threshold = +q.get('threshold'); if (!q.get('rule')) state.opRule = 'custom'; }
   if (q.get('recording')) state.recording = q.get('recording');
+  state.matrixAll = q.get('models') === 'all';
   for (const k of Object.keys(state.filters)) if (q.get(k)) state.filters[k] = q.get(k);
   if (q.get('embed') && state.embeddings.some((e) => e.name === q.get('embed'))) state.embedName = q.get('embed');
   if (q.get('color') && [...$('embedColor').options].some((o) => o.value === q.get('color'))) state.embedColor = q.get('color');
@@ -293,9 +299,11 @@ function writeUrlState() {
   if (state.opRule === 'custom') q.set('threshold', state.threshold.toFixed(2));
   for (const [k, v] of Object.entries(state.filters)) if (v) q.set(k, v);
   if (state.recording) q.set('recording', state.recording);
+  if (state.matrixAll) q.set('models', 'all');
   if (state.embeddings.length > 1 && state.embedName) q.set('embed', state.embedName);
   if (state.embedColor !== 'outcome') q.set('color', state.embedColor);
   const theme = document.documentElement.dataset.theme; if (theme) q.set('theme', theme);
+  if (document.documentElement.classList.contains('present')) q.set('present', '1');
   history.replaceState(null, '', `?${q}`);
 }
 

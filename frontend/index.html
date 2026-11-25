@@ -14,6 +14,7 @@
     <span class="brand-sub">where and why error-detection models fail on CaptainCook4D</span>
   </div>
   <div class="status"><span id="status">loading…</span>
+    <label class="theme" title="presentation hides the explanatory notes, for a projector">mode <select id="mode"><option value="">full</option><option value="1">presentation</option></select></label>
     <label class="theme">theme <select id="theme"><option value="">auto</option><option value="light">light</option><option value="dark">dark</option></select></label></div>
 </header>
 
@@ -51,7 +52,7 @@
       <div class="inline-controls"><label>Steps with several categories <select id="multiLabel">
         <option value="all" selected>count in every category they carry</option>
         <option value="single">exclude (single-category steps only)</option>
-      </select></label></div></div>
+      </select></label><span id="matrixScope"></span></div></div>
     <div id="matrix" class="table-wrap"></div>
     <div id="compare" class="compare"></div>
   </section>
@@ -101,13 +102,15 @@
 
   <section class="card" id="card-timeline">
     <div class="card-head"><h2>Recording timeline</h2>
-      <p class="hint">Ground-truth steps (colored by error category) above the models' per-second error scores. Click a step to inspect it and jump the video.</p>
+      <p class="hint">Ground-truth steps (colored by error category) above the models' per-second error scores. Click a step to inspect it and jump the video; drag across the scores to scrub. While the video plays, a line marks its time and the details follow the step on screen.</p>
       <div class="inline-controls"><label>Recording <select id="recording"></select></label></div>
     </div>
-    <div id="timeline"></div>
-    <div class="timeline-bottom">
-      <div id="stepDetail" class="detail"></div>
+    <div class="timeline-body">
       <div id="videoBox" class="video"></div>
+      <div class="timeline-main">
+        <div id="timeline"></div>
+        <div id="stepDetail" class="detail"></div>
+      </div>
     </div>
   </section>
 </main>

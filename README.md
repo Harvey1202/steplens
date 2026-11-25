@@ -138,11 +138,16 @@ Screenshots of the tool: start it (`uvicorn steplens.server:app --port 8781`), o
 
 | Screenshot | URL | Element |
 | --- | --- | --- |
-| Overview | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | top 960 px, matrix scrolled so model A's column is third |
+| Overview | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light&models=all` | top 960 px |
 | Task graph | `?modelA=omnivore_mlp_video_step_random_lr1e-4&rule=balanced&theme=light&activity_id=25` | the task graph |
 | Slice stability | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | slice table header + first 7 rows |
 | Compare strip | `?modelA=omnivore_mlp_video_step_lr1e-4&modelB=slowfast_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the compare strip |
 | Timeline | `?modelA=omnivore_transformer_video_recordings&rule=balanced&theme=light&recording=25_40&person_id=2` | the timeline card down to its legend |
+
+The paper's screenshots were taken on 2026-11-17, before four display changes: the matrix puts model A first and shows a
+short list of models until you click *show all*, the slice table uses readable names (`kitchen 2` for `environment_id=2`),
+the timeline's score axis fits the recording instead of running 0–1, and its outcome row carries ✓ / ✗ / ! icons.
+The numbers are unchanged.
 
 ## Run the tool
 
@@ -152,7 +157,8 @@ open http://127.0.0.1:8781/
 ```
 
 The page keeps its state in the URL (model A/B, phase, operating point, filters,
-recording, theme), so a view can be shared as a link. Operating points: each
+recording, theme), so a view can be shared as a link. Presentation mode (the *mode*
+menu at the top right, or `&present=1` in the URL) hides the explanatory notes so the views read from a projector. Operating points: each
 model's threshold is chosen on its own validation steps (balanced = max TPR −
 FPR, or best F1), or the paper protocol (min-max normalized scores at 0.6 / 0.4),
 or one custom threshold for all models.
