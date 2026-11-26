@@ -144,10 +144,14 @@ Screenshots of the tool: start it (`uvicorn steplens.server:app --port 8781`), o
 | Compare strip | `?modelA=omnivore_mlp_video_step_lr1e-4&modelB=slowfast_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the compare strip |
 | Timeline | `?modelA=omnivore_transformer_video_recordings&rule=balanced&theme=light&recording=25_40&person_id=2` | the timeline card down to its legend |
 
-The paper's screenshots were taken on 2026-11-17, before four display changes: the matrix puts model A first and shows a
-short list of models until you click *show all*, the slice table uses readable names (`kitchen 2` for `environment_id=2`),
-the timeline's score axis fits the recording instead of running 0–1, and its outcome row carries ✓ / ✗ / ! icons.
-The numbers are unchanged.
+The paper's screenshots were taken on 2026-11-17, before these display changes: the page is one column in the order
+matrix, slices, task graph, timeline, UMAP (so *Overview* now shows the settings, scorecard and matrix, and the UMAP is at
+the bottom); the settings sit in three labelled rows (model, decision, filter) above a scorecard that leads with missed,
+false alarm and AUC; the matrix puts model A first, shows a short list of models until you click *show all*, and hatches
+cells with fewer than 5 steps instead of coloring them; the slice table uses readable names (`kitchen 2` for
+`environment_id=2`); step names drop the dataset's keyword prefix (`Add 1/4 tsp salt to the pan` for
+`add-add 1/4 tsp salt to the pan`); the timeline's score axis fits the recording instead of running 0–1, and its outcome
+row carries ✓ / ✗ / ! icons. The numbers are unchanged.
 
 ## Run the tool
 
@@ -158,7 +162,7 @@ open http://127.0.0.1:8781/
 
 The page keeps its state in the URL (model A/B, phase, operating point, filters,
 recording, theme), so a view can be shared as a link. Presentation mode (the *mode*
-menu at the top right, or `&present=1` in the URL) hides the explanatory notes so the views read from a projector. Operating points: each
+menu at the top right, or `&present=1` in the URL) hides the explanatory notes and the decision row of the settings so the views read from a projector. Operating points: each
 model's threshold is chosen on its own validation steps (balanced = max TPR −
 FPR, or best F1), or the paper protocol (min-max normalized scores at 0.6 / 0.4),
 or one custom threshold for all models.

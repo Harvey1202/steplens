@@ -19,27 +19,32 @@
 </header>
 
 <section class="controls" aria-label="Filters and model settings">
-  <label>Model A <select id="modelA"></select></label>
-  <label>Compare with <select id="modelB"><option value="">none</option></select></label>
-  <label>Phase <select id="phase">
-    <option value="test" selected>test</option><option value="val">val</option><option value="train">train</option><option value="all">all</option>
-  </select></label>
-  <label class="check"><input type="checkbox" id="norm"> official min-max normalization</label>
-  <label>Operating point <select id="opRule" title="How each model's decision threshold is chosen">
-    <option value="balanced" selected>balanced on val (max TPR − FPR)</option>
-    <option value="f1">best F1 on val</option>
-    <option value="paper">paper protocol (normalized, 0.6 step / 0.4 others)</option>
-    <option value="custom">custom (one threshold for all models)</option>
-  </select></label>
-  <label>Threshold (A) <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.5"> <output id="thresholdOut">0.50</output></label>
-  <span class="sep"></span>
-  <label>Recipe <select id="fActivity"><option value="">all</option></select></label>
-  <label>Person <select id="fPerson"><option value="">all</option></select></label>
-  <label>Kitchen <select id="fEnvironment"><option value="">all</option></select></label>
-  <label>Category <select id="fCategory"><option value="">all</option></select></label>
-  <label>Duration <select id="fDuration"><option value="">all</option></select></label>
-  <label>Position <select id="fPosition"><option value="">all</option></select></label>
-  <button id="reset" type="button">Reset filters</button>
+  <div class="ctl-row" role="group" aria-label="Model"><span class="ctl-tag" title="which model to diagnose, and on which data">Model</span><div class="ctl-items">
+    <label>Model A <select id="modelA"></select></label>
+    <label>Compare with <select id="modelB"><option value="">none</option></select></label>
+    <label>Phase <select id="phase">
+      <option value="test" selected>test</option><option value="val">val</option><option value="train">train</option><option value="all">all</option>
+    </select></label>
+  </div></div>
+  <div class="ctl-row ctl-decision" role="group" aria-label="Decision"><span class="ctl-tag" title="how a score becomes an error / normal decision">Decision</span><div class="ctl-items">
+    <label>Operating point <select id="opRule" title="How each model's decision threshold is chosen">
+      <option value="balanced" selected>balanced on val (max TPR − FPR)</option>
+      <option value="f1">best F1 on val</option>
+      <option value="paper">paper protocol (normalized, 0.6 step / 0.4 others)</option>
+      <option value="custom">custom (one threshold for all models)</option>
+    </select></label>
+    <label>Threshold (A) <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.5"> <output id="thresholdOut">0.50</output></label>
+    <label class="check"><input type="checkbox" id="norm"> official min-max normalization</label>
+  </div></div>
+  <div class="ctl-row" role="group" aria-label="Filter"><span class="ctl-tag" title="show only one group of steps; applies to every view">Filter</span><div class="ctl-items">
+    <label>Recipe <select id="fActivity"><option value="">all</option></select></label>
+    <label>Person <select id="fPerson"><option value="">all</option></select></label>
+    <label>Kitchen <select id="fEnvironment"><option value="">all</option></select></label>
+    <label>Category <select id="fCategory"><option value="">all</option></select></label>
+    <label>Duration <select id="fDuration"><option value="">all</option></select></label>
+    <label>Position <select id="fPosition"><option value="">all</option></select></label>
+    <button id="reset" type="button">Reset filters</button>
+  </div></div>
 </section>
 <div id="chips" class="chips" aria-live="polite"></div>
 <div id="summary" class="summary"></div>
@@ -47,7 +52,7 @@
 <main class="grid">
   <section class="card" id="card-matrix">
     <div class="card-head"><h2>Miss rate by error category × model</h2>
-      <p class="hint">Cell = share of that category's error steps the model misses at the current threshold. Last row = false-alarm rate on normal steps. Click a cell to focus a category and model.
+      <p class="hint">Cell = share of that category's error steps the model misses at the current threshold. Last row = false-alarm rate on normal steps. Click a cell to show only that category in the other views (click again to clear); click a column title to make that model A.
         The model makes one error/normal decision per step, so a step with several error categories counts in every row it belongs to and is caught or missed in all of them at once; rows overlap and do not add up to the number of error steps.</p>
       <div class="inline-controls"><label>Steps with several categories <select id="multiLabel">
         <option value="all" selected>count in every category they carry</option>
@@ -56,23 +61,6 @@
     <div id="matrix" class="table-wrap"></div>
     <div id="compare" class="compare"></div>
   </section>
-
-  <section class="card" id="card-embed">
-    <div class="card-head"><h2>Step features (UMAP)</h2>
-      <p class="hint">Each dot is one step, placed by UMAP from the mean of its frozen segment features, which is what the error-recognition heads see. Steps outside the current phase and filters are drawn faint. If dots group by person or recording rather than by outcome, the features say more about who recorded a step than about whether it went wrong; the table below measures this in the full feature space. Hover for details, click a dot to open the step in the timeline.</p>
-      <div class="inline-controls">
-        <label>Features <select id="embedName"></select></label>
-        <label>Color by <select id="embedColor">
-          <option value="outcome" selected>outcome for model A</option>
-          <option value="person_id">person</option>
-          <option value="environment_id">kitchen</option>
-          <option value="activity_id">recipe</option>
-          <option value="has_errors">has an error</option>
-        </select></label>
-      </div></div>
-    <div id="embed"></div>
-  </section>
-
   <section class="card" id="card-slices">
     <div class="card-head"><h2>Slices with the most missed errors</h2>
       <p class="hint">Metadata subgroups (recipe, person, kitchen, step duration, position in recipe, optionally × category), ranked by miss rate above the model's overall rate. The seeds and models columns show whether other training runs and other models flag the same slice. Click a row to apply it as a filter.</p>
@@ -112,6 +100,22 @@
         <div id="stepDetail" class="detail"></div>
       </div>
     </div>
+  </section>
+
+  <section class="card" id="card-embed">
+    <div class="card-head"><h2>Step features (UMAP)</h2>
+      <p class="hint">Each dot is one step, placed by UMAP from the mean of its frozen segment features, which is what the error-recognition heads see. Steps outside the current phase and filters are drawn faint. If dots group by person or recording rather than by outcome, the features say more about who recorded a step than about whether it went wrong; the table below measures this in the full feature space. Hover for details, click a dot to open the step in the timeline.</p>
+      <div class="inline-controls">
+        <label>Features <select id="embedName"></select></label>
+        <label>Color by <select id="embedColor">
+          <option value="outcome" selected>outcome for model A</option>
+          <option value="person_id">person</option>
+          <option value="environment_id">kitchen</option>
+          <option value="activity_id">recipe</option>
+          <option value="has_errors">has an error</option>
+        </select></label>
+      </div></div>
+    <div id="embed"></div>
   </section>
 </main>
 

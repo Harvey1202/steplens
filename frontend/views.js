@@ -1,6 +1,7 @@
 // StepLens views: performance matrix, compare strip, slice table, task graph, timeline.
 import { state, $, stepsFor, predOf, isPos, inPhase, scoreOf, outcome, metricsOf, matchesFilters,
-  catNameOf, activityName, fmtPct, fmtTime, api, setFilters, setModelA, thresholdFor, RULE_LABEL, update } from './app.js';
+  catNameOf, activityName, fmtPct, fmtTime, api, setFilters, setModelA, thresholdFor, RULE_LABEL, update, writeUrlState,
+  stepName, stepVerb } from './app.js';
 
 // ---------------------------------------------------------------- color
 const RAMP = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
@@ -51,16 +52,32 @@ export function renderSummary() {
   const describe = (id, tag) => {
     if (!id) return;
     const items = stepsFor(id), m = metricsOf(items), model = state.modelById.get(id);
-    const parts = [[`${tag}`, model.label], ['steps', `${m.n} (${m.nError} with errors)`], ['threshold', `${thresholdFor(id).toFixed(2)} (${RULE_LABEL[state.opRule]}${state.norm ? ', normalized' : ''})`],
-      ['acc', fmtPct(m.accuracy)], ['precision', fmtPct(m.precision)], ['recall', fmtPct(m.recall)], ['F1', fmtPct(m.f1)],
-      ['AUC', Number.isFinite(m.auc) ? m.auc.toFixed(3) : '–'], ['false alarm', fmtPct(m.falseAlarm)]];
-    for (const [k, v] of parts) { const s = el('span'); s.append(document.createTextNode(`${k} `), el('b', {}, v)); box.appendChild(s); }
+    const row = el('div', { class: 'sc' });
+    const name = el('span', { class: 'sc-model', title: model.label }); name.append(el('span', { class: 'tag' }, tag), document.createTextNode(model.label));
+    row.appendChild(name);
+    // The three numbers the findings are about, large; then the rest of the scorecard in small type.
+    const kpi = (value, label, title) => { const k = el('span', { class: 'kpi' }); k.title = title; k.append(el('b', {}, value), el('span', {}, label)); row.appendChild(k); };
+    kpi(m.nError ? fmtPct(1 - m.recall) : '–', 'missed', 'share of error steps the model does not flag (1 − recall)');
+    kpi(fmtPct(m.falseAlarm), 'false alarm', 'share of normal steps the model flags as errors');
+    kpi(Number.isFinite(m.auc) ? m.auc.toFixed(3) : '–', 'AUC', 'how well the scores separate error from normal steps, at any threshold (0.5 = chance, 1 = perfect)');
+    const rest = el('span', { class: 'rest' });
+    [['steps', `${m.n} (${m.nError} with errors)`], ['threshold', `${thresholdFor(id).toFixed(2)} (${RULE_LABEL[state.opRule]}${state.norm ? ', normalized' : ''})`],
+      ['recall', fmtPct(m.recall)], ['precision', fmtPct(m.precision)], ['F1', fmtPct(m.f1)], ['acc', fmtPct(m.accuracy)]]
+      .forEach(([k, v], i) => rest.append(document.createTextNode(`${i ? ' · ' : ''}${k} `), el('b', {}, v)));
+    row.appendChild(rest);
+    box.appendChild(row);
   };
   describe(state.modelA, 'A');
-  if (state.modelB) { box.appendChild(el('span', { style: 'flex-basis:100%;height:0' })); describe(state.modelB, 'B'); }
+  describe(state.modelB, 'B');
 }
 
 // ---------------------------------------------------------------- matrix
+const MIN_CELL_N = 5;   // matrix cells with fewer steps are hatched instead of colored
+// Column order of the last matrix draw. Picking model A from a column title pins the columns where they are
+// (only the underline moves) until model A, model B or "show all" changes some other way; picking A from the
+// menu regroups them around the new A.
+let matrixCols = null;   // { ids, all, b, pinnedFor }
+
 export function renderMatrix() {
   const box = $('matrix');
   box.replaceChildren();
@@ -74,14 +91,19 @@ export function renderMatrix() {
     : seedBase(m.model_id) === seedBase(A.model_id) ? 2 : m.model_id.startsWith('paper_') && m.split === A.split ? 3 : 4);
   const ranked = state.models.map((m, i) => [m, i, rank(m)]).sort((x, y) => x[2] - y[2] || x[1] - y[1]);
   const nMain = ranked.filter((r) => r[2] < 4).length;
-  const ordered = ranked.filter((r) => state.matrixAll || r[2] < 4).map(([m]) => m);
+  let ordered = ranked.filter((r) => state.matrixAll || r[2] < 4).map(([m]) => m);
+  const keep = !!matrixCols && matrixCols.pinnedFor === A.model_id && matrixCols.all === state.matrixAll && matrixCols.b === (state.modelB || '');
+  if (keep) ordered = matrixCols.ids.map((id) => state.modelById.get(id)).filter(Boolean);
+  matrixCols = { ids: ordered.map((m) => m.model_id), all: state.matrixAll, b: state.modelB || '', pinnedFor: keep ? A.model_id : null };
   const scope = $('matrixScope');
   if (scope) {
     const toggle = el('button', { type: 'button', class: 'ghost' }, state.matrixAll ? `show the ${nMain} main models` : `show all ${state.models.length} models`);
     toggle.addEventListener('click', () => { state.matrixAll = !state.matrixAll; update(); });
-    scope.replaceChildren(document.createTextNode(state.matrixAll ? `All ${state.models.length} models · ` : `${nMain} of ${state.models.length} models: A${state.modelB ? ', B' : ''}, its training seeds, the authors' checkpoints · `), toggle);
+    scope.replaceChildren(document.createTextNode(state.matrixAll ? `All ${state.models.length} models · ` : keep ? `${ordered.length} of ${state.models.length} models · ` : `${nMain} of ${state.models.length} models: A${state.modelB ? ', B' : ''}, its training seeds, the authors' checkpoints · `), toggle);
   }
-  const perModel = ordered.map((m) => ({ m, items: stepsFor(m.model_id) }));
+  // The matrix sets the category filter, so it ignores that filter itself (it marks the chosen row instead);
+  // every other filter still applies.
+  const perModel = ordered.map((m) => ({ m, items: stepsFor(m.model_id, { category: true }) }));
 
   const table = el('table', { class: 'matrix' });
   const thead = el('thead'), hr = el('tr');
@@ -89,9 +111,9 @@ export function renderMatrix() {
   hr.appendChild(el('th', { class: 'num' }, 'steps'));
   for (const { m, items } of perModel) {
     const th = el('th', { class: `model${m.model_id === state.modelA ? ' a' : ''}${m.model_id === state.modelB ? ' b' : ''}` });
-    const b = el('button', { type: 'button', class: 'ghost', title: 'use as model A' }, m.label);
+    const b = el('button', { type: 'button', class: 'ghost', title: m.model_id === state.modelA ? 'model A' : 'click to make this model A' }, m.label);
     b.style.color = 'inherit';
-    b.addEventListener('click', () => setModelA(m.model_id));
+    b.addEventListener('click', () => { if (matrixCols) matrixCols.pinnedFor = m.model_id; setModelA(m.model_id); });
     th.appendChild(b);
     th.appendChild(el('div', { style: 'font-weight:400;color:var(--muted)' }, `${state.phase} · ${items.length} steps · thr ${thresholdFor(m.model_id).toFixed(2)}`));
     hr.appendChild(th);
@@ -106,7 +128,8 @@ export function renderMatrix() {
   rows.push({ key: 'normal', name: 'Normal steps (false-alarm rate)', color: cssVar('--normal-fill'), pick: (d) => !d.s.has_errors, missRate: false });
 
   for (const r of rows) {
-    const tr = el('tr');
+    const chosen = state.filters.category === r.key;
+    const tr = el('tr', chosen ? { class: 'chosen' } : {});
     const td = el('td');
     const dot = el('span', { class: 'dot' }); dot.style.background = r.color;
     td.append(dot, document.createTextNode(r.name));
@@ -118,19 +141,24 @@ export function renderMatrix() {
       const n = sub.length;
       const bad = r.missRate ? sub.filter((d) => !d.pos).length : sub.filter((d) => d.pos).length;
       const rate = n ? bad / n : NaN;
-      const td2 = el('td', { class: `cell${state.filters.category === r.key && m.model_id === state.modelA ? ' selected' : ''}` });
+      const td2 = el('td', { class: 'cell' });
       const btn = el('button', { type: 'button' });
       if (n) {
-        const fill = seq(rate); btn.style.background = fill; btn.style.color = inkOn(fill);
+        // Too few steps for a rate to mean anything (e.g. 1 of 1 = 100%): hatched and uncolored, so the
+        // darkest cell is always a real one.
+        const few = n < MIN_CELL_N;
+        if (few) btn.classList.add('few');
+        else { const fill = seq(rate); btn.style.background = fill; btn.style.color = inkOn(fill); }
         btn.append(el('span', { class: 'v' }, fmtPct(rate)), el('span', { class: 'n' }, `${bad} / ${n}`));
-        btn.addEventListener('click', () => {
-          const same = state.filters.category === r.key && state.modelA === m.model_id;
-          state.modelA = m.model_id;
-          setFilters({ category: same || r.key === 'normal' ? '' : r.key });
-        });
+        // A click picks the category for the other views (a second click clears it); it does not change model A,
+        // which the column titles do.
+        btn.addEventListener('click', () => setFilters({ category: chosen || r.key === 'normal' ? '' : r.key }));
         btn.addEventListener('pointermove', (e) => showTip(e, `${r.name} · ${m.label}`, [
           { label: r.missRate ? 'missed' : 'false alarms', value: `${bad} of ${n}` },
-          { label: r.missRate ? 'miss rate' : 'false-alarm rate', value: fmtPct(rate) }], r.key === 'missing' ? '' : 'click to focus this category and model'));
+          { label: r.missRate ? 'miss rate' : 'false-alarm rate', value: fmtPct(rate) }],
+          (few ? `only ${n} step${n > 1 ? 's' : ''}: too few to read, so not colored. ` : '')
+            + (r.key === 'normal' ? (state.filters.category ? 'click to clear the category filter' : '')
+              : chosen ? 'click to clear the category filter' : 'click to show only this category in the other views')));
         btn.addEventListener('pointerleave', hideTip);
       } else {
         btn.style.background = 'transparent'; btn.style.color = 'var(--muted)';
@@ -146,7 +174,10 @@ export function renderMatrix() {
   table.appendChild(tbody);
   box.appendChild(table);
   const legend = el('div', { class: 'legend' });
-  legend.append(document.createTextNode('0% missed'), el('span', { class: 'ramp' }), document.createTextNode(`100% missed · thresholds: ${RULE_LABEL[state.opRule]}` + (state.norm ? ' on min-max normalized step scores' : ' on mean per-second score')));
+  const fewKey = el('span', { class: 'key few' });
+  legend.append(document.createTextNode('0% missed'), el('span', { class: 'ramp' }), el('span', {}, '100% missed'),
+    fewKey, el('span', {}, `fewer than ${MIN_CELL_N} steps (not colored)`),
+    el('span', { style: 'margin-left:8px' }, `thresholds: ${RULE_LABEL[state.opRule]}` + (state.norm ? ' on min-max normalized step scores' : ' on mean per-second score')));
   box.appendChild(legend);
 }
 
@@ -155,7 +186,8 @@ export function renderCompare() {
   const box = $('compare');
   box.replaceChildren();
   if (!state.modelB || state.modelB === state.modelA) return;
-  const A = stepsFor(state.modelA), B = stepsFor(state.modelB);
+  // one row per category, like the matrix above it, so it ignores the category filter the same way
+  const A = stepsFor(state.modelA, { category: true }), B = stepsFor(state.modelB, { category: true });
   const bByKey = new Map(B.map((d) => [d.s.step_key, d]));
   const keys = [...state.meta.category_keys.filter((k) => k !== 'missing'), 'normal'];
   const rows = keys.map((k) => {
@@ -271,7 +303,9 @@ function openStep(key) {
   state.selectedStep = key;
   renderTimeline();
   renderEmbedding();
-  $('card-timeline').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  writeUrlState();
+  const card = $('card-timeline'), bar = document.querySelector('.controls');   // the settings bar is sticky
+  window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - (bar ? bar.offsetHeight : 0) - 8, behavior: 'smooth' });
 }
 
 export async function renderEmbedding() {
@@ -299,7 +333,10 @@ export async function renderEmbedding() {
     pts.push({ key, x, y, s, p, active: !!p && inPhase(p) && matchesFilters(s), oc: p ? outcome(s, isPos(p, model)) : null });
   }
   const pal = embedPalette();
-  const W = Math.max(300, box.clientWidth || 600), H = Math.round(Math.min(520, Math.max(280, W * 0.7))), pad = 10;
+  // The plot and the neighbour table sit side by side; keep the two columns so the plot can be measured.
+  let plot = box.querySelector('.embed-plot'), side = box.querySelector('.embed-side');
+  if (!plot || !side) { plot = el('div', { class: 'embed-plot' }); side = el('div', { class: 'embed-side' }); const split = el('div', { class: 'embed-split' }); split.append(plot, side); box.replaceChildren(split); }
+  const W = Math.max(300, plot.clientWidth || 600), H = Math.round(Math.min(520, Math.max(280, W * 0.7))), pad = 10;
   const xs = d3.scaleLinear().domain(d3.extent(pts, (d) => d.x)).range([pad, W - pad]);
   const ys = d3.scaleLinear().domain(d3.extent(pts, (d) => d.y)).range([H - pad, pad]);
   for (const d of pts) { d.px = xs(d.x); d.py = ys(d.y); }
@@ -340,12 +377,13 @@ export async function renderEmbedding() {
       { label: 'errors', value: s.has_errors ? (s.error_list || []).join(', ') || 'yes' : 'none' },
     ];
     if (d.p) rows.push({ label: `model A (${d.p.phase})`, value: d.oc ? OUTCOME_LABEL[d.oc] : '–', color: d.oc && d.oc !== 'TN' ? OUTCOME[d.oc].color() : undefined });
-    showTip(evt, `${s.activity_name}: ${s.step_description.split(' -')[0]}`, rows, d.active ? 'click to open in the timeline' : 'outside the current phase or filters');
+    showTip(evt, `${s.activity_name}: ${stepName(s.step_description)}`, rows, d.active ? 'click to open in the timeline' : 'outside the current phase or filters');
   });
   canvas.addEventListener('mouseleave', hideTip);
   canvas.addEventListener('click', (evt) => { const d = nearest(evt); if (d && d.active) { hideTip(); openStep(d.key); } });
 
-  box.replaceChildren(canvas, embedLegend(pts, pal), neighbourTable(info));
+  plot.replaceChildren(canvas, embedLegend(pts, pal));
+  side.replaceChildren(neighbourTable(info));
 }
 
 // ---------------------------------------------------------------- slices
@@ -411,12 +449,21 @@ export async function renderSlices() {
   const stabNote = stab.models.length || stab.seed_runs.length > 1
     ? ` Seeds / models = in how many runs of this configuration (${stab.seed_runs.length}) and in how many other models on the ${split} split (${stab.models.length}, the authors' checkpoints included) the same slice is also flagged: miss rate above that model's own overall rate with z ≥ 2, each at its own threshold (${RULE_LABEL[state.opRule]}). A slice flagged by one run only is a hypothesis, not a finding.`
     : '';
-  box.appendChild(el('div', { class: 'legend slice-note' }, `Overall on this selection: miss rate ${fmtPct(1 - (o.recall ?? NaN))} (${(o.n_error ?? 0) - (o.tp ?? 0)} of ${o.n_error ?? 0} errors), false-alarm rate ${fmtPct(o.false_alarm)}. ${data.n_slices ?? 0} slices shown; brackets are 95% Wilson intervals.${confirmNote}${stabNote}`));
+  // After a row is clicked its slice becomes the filter; that slice (e.g. "person 2" inside person 2) would be
+  // compared with itself (+0 pts, no seeds or models flag it), so it is left out.
+  const isActive = (part) => {
+    const i = part.indexOf('='), k = part.slice(0, i), v = part.slice(i + 1);
+    if (k === 'activity_name') return !!f.activity_id && activityName(f.activity_id) === v;
+    if (k === 'category') return !!f.category && catNameOf(f.category) === v;
+    return !!f[k] && String(f[k]) === v;
+  };
+  const sliceRows = (data.slices || []).filter((r) => !String(r.slice).split(' & ').every(isActive));
+  box.appendChild(el('div', { class: 'legend slice-note' }, `Overall on this selection: miss rate ${fmtPct(1 - (o.recall ?? NaN))} (${(o.n_error ?? 0) - (o.tp ?? 0)} of ${o.n_error ?? 0} errors), false-alarm rate ${fmtPct(o.false_alarm)}. ${sliceRows.length} slices shown; brackets are 95% Wilson intervals.${confirmNote}${stabNote}`));
   const table = el('table'), thead = el('thead'), tr = el('tr');
   for (const [t, cls, title] of [['Slice', ''], ['errors', 'num'], ['missed', 'num'], ['miss rate', 'num'], ['Δ vs overall', 'num'], ['z', 'num'], ['hold-out', 'num', 'same slice on the hold-out phase; ✓ = also above the overall miss rate there'], ['seeds', 'num', 'in how many runs of this model configuration (different training seeds) the slice is flagged (z ≥ 2)'], ['models', 'num', 'in how many other models on the same split the slice is flagged (z ≥ 2), each at its own threshold'], ['AUC', 'num', 'error-vs-normal AUC inside the slice: low means the model cannot separate them there, high with a high miss rate means its scores are just shifted'], ['false alarm', 'num'], ['Δ', 'num']]) { const th = el('th', { class: cls }, t); if (title) th.title = title; tr.appendChild(th); }
   thead.appendChild(tr); table.appendChild(thead);
   const tbody = el('tbody');
-  for (const r of data.slices || []) {
+  for (const r of sliceRows) {
     const row = el('tr', { class: 'clickable' });
     const name = el('td', { style: 'white-space:normal' }, sliceLabel(r.slice)); name.title = r.slice;
     row.appendChild(name);
@@ -446,7 +493,10 @@ export async function renderSlices() {
     });
     tbody.appendChild(row);
   }
-  if (!(data.slices || []).length) tbody.appendChild(el('tr')).appendChild(el('td', { colspan: 12, class: 'empty' }, 'No slice meets the minimum size.'));
+  const anyFilter = Object.values(f).some(Boolean);
+  if (!sliceRows.length) tbody.appendChild(el('tr')).appendChild(el('td', { colspan: 12, class: 'empty' }, anyFilter
+    ? `No smaller group inside this selection has ${state.minSize} or more error steps. Lower "min error steps", or press Reset filters to see every slice.`
+    : 'No slice meets the minimum size.'));
   table.appendChild(tbody);
   box.appendChild(table);
   box.style.opacity = '';
@@ -526,7 +576,7 @@ export function renderGraph() {
   gn.append('rect').attr('width', (n) => (n.kind === 'step' ? nodeW : 60)).attr('height', nodeH).attr('rx', 4)
     .attr('fill', (n) => fillOf(n) || 'var(--surface-1)').attr('stroke', (n) => (fillOf(n) ? 'none' : 'var(--axis)')).attr('stroke-width', 1);
   gn.append('text').attr('x', 8).attr('y', 15).attr('fill', (n) => (fillOf(n) ? inkOn(fillOf(n)) : 'var(--ink)')).text((n) => {
-    const l = n.kind === 'step' ? n.label.split(' -')[0].replace(/^[a-z]/, (c) => c.toUpperCase()) : n.label; return l.length > 20 ? `${l.slice(0, 19)}…` : l;
+    const l = n.kind === 'step' ? stepName(n.label) : n.label; return l.length > 21 ? `${l.slice(0, 20)}…` : l;
   });
   gn.filter((n) => n.kind === 'step').append('text').attr('x', 8).attr('y', 29).attr('font-size', 10.5).attr('fill', (n) => (fillOf(n) ? inkOn(fillOf(n)) : 'var(--muted)'))
     .text((n) => { const st = stats.get(n.step_id); return st && st.n ? `${st.missed}/${st.n} missed${st.fa ? ` · ${st.fa} FA` : ''}` : (st && st.normal ? `${st.fa}/${st.normal} false alarms` : 'no scored steps'); });
@@ -535,7 +585,7 @@ export function renderGraph() {
     const st = stats.get(n.step_id) || { n: 0, missed: 0, normal: 0, fa: 0, cats: {} };
     const rows = [{ label: 'error steps', value: String(st.n) }, { label: 'missed', value: st.n ? `${st.missed} (${fmtPct(st.missed / st.n)})` : '–' }, { label: 'normal steps', value: String(st.normal) }, { label: 'false alarms', value: st.normal ? `${st.fa} (${fmtPct(st.fa / st.normal)})` : '–' }];
     for (const [c, k] of Object.entries(st.cats)) rows.push({ label: c, value: String(k), color: catColor(state.meta.category_keys[state.meta.categories.indexOf(c)]) });
-    showTip(e, n.label, rows, 'click to filter the other views to this step');
+    showTip(e, stepName(n.label), rows, 'click to filter the other views to this step');
   }).on('pointerleave', hideTip).on('click', (e, n) => { if (n.step_id == null) return; setFilters({ step_id: String(state.filters.step_id) === String(n.step_id) ? '' : String(n.step_id) }); });
   wrap.appendChild(svg.node());
   box.appendChild(wrap);
@@ -549,7 +599,7 @@ export function renderGraph() {
     const tb = el('tbody');
     for (const n of nodes.filter((x) => x.kind === 'step')) {
       const st = stats.get(n.step_id) || { n: 0, missed: 0, normal: 0, fa: 0 };
-      const r = el('tr'); r.appendChild(el('td', { style: 'white-space:normal' }, n.label));
+      const r = el('tr'); r.appendChild(el('td', { style: 'white-space:normal' }, stepName(n.label)));
       for (const v of [st.n, st.missed, st.n ? fmtPct(st.missed / st.n) : '–', st.normal, st.fa]) r.appendChild(el('td', { class: 'num' }, String(v)));
       tb.appendChild(r);
     }
@@ -628,9 +678,9 @@ function drawTimeline(rid, segs, secA, secB) {
     const inP = p && inPhase(p);
     const r = gt.append('rect').attr('x', x0).attr('y', gtY).attr('width', w).attr('height', gtH).attr('rx', 3).attr('fill', fill).attr('opacity', inP ? 1 : 0.45).style('cursor', 'pointer')
       .attr('stroke', state.selectedStep === sg.step_key ? 'var(--ink)' : 'none').attr('stroke-width', 2).attr('data-step', sg.step_key);
-    const short = s.step_description.split(' -')[0];
+    const short = stepVerb(s.step_description);
     if (w > short.length * 6.8 + 10) gt.append('text').attr('x', x0 + 6).attr('y', gtY + gtH / 2 + 4).attr('font-size', 11).attr('fill', k ? inkOn(fill) : 'var(--ink)').attr('pointer-events', 'none').text(short);
-    r.on('pointermove', (e) => showTip(e, s.step_description, [
+    r.on('pointermove', (e) => showTip(e, stepName(s.step_description), [
       { label: 'time', value: `${fmtTime(sg.start_time)} – ${fmtTime(sg.end_time)}` },
       ...(s.error_tags || []).map((t) => ({ label: t, value: '', color: catColor(state.meta.category_keys[state.meta.categories.indexOf(t)]) })),
       ...(p ? [{ label: `score A${state.norm ? ' (norm)' : ''}`, value: scoreOf(p).toFixed(3) }, { label: 'phase for model A', value: p.phase }] : []),
@@ -708,7 +758,7 @@ function drawTimeline(rid, segs, secA, secB) {
         rows.push({ label: `${sr.tag} per-second`, value: v == null ? '–' : v.toFixed(3) });
       }
       if (sg) { const s = stepOf(sg.step_key); rows.unshift({ label: 'ground truth', value: s.has_errors ? (s.error_tags || []).join(', ') : 'normal' }); }
-      showTip(e, `${fmtTime(t)}${sg ? ` · ${stepOf(sg.step_key).step_description.split(' -')[0]}` : ''}`, rows);
+      showTip(e, `${fmtTime(t)}${sg ? ` · ${stepName(stepOf(sg.step_key).step_description)}` : ''}`, rows);
     }).on('pointerleave', () => { cross.style('display', 'none'); hideTip(); });
   box.appendChild(svg.node());
   const vid = currentVideo(rid);
@@ -723,7 +773,7 @@ function drawTimeline(rid, segs, secA, secB) {
   const skipped = steps.filter((s) => s.is_missing);
   if (skipped.length) {
     const d = el('div', { class: 'legend' }); d.appendChild(el('span', {}, `Skipped steps (Missing Step errors, never scored): `));
-    for (const s of skipped) { const sp = el('span'); const key = el('span', { class: 'dot' }); key.style.background = catColor('missing'); sp.append(key, document.createTextNode(s.step_description.split(' -')[0])); d.appendChild(sp); }
+    for (const s of skipped) { const sp = el('span'); const key = el('span', { class: 'dot' }); key.style.background = catColor('missing'); sp.append(key, document.createTextNode(stepName(s.step_description))); d.appendChild(sp); }
     box.appendChild(d);
   }
 }
@@ -774,7 +824,7 @@ function renderDetail() {
     box.appendChild(el('div', { class: 'empty' }, between ? `${fmtTime(tl.lastT)} · no annotated step at this moment (between steps).` : 'Click a step in the timeline, or drag across it, to see its errors and scores.'));
     return;
   }
-  box.appendChild(el('h3', {}, s.step_description));
+  box.appendChild(el('h3', {}, stepName(s.step_description)));
   box.appendChild(el('div', {}, `${s.activity_name} · recording ${s.recording_id} · person ${s.person_id} · kitchen ${s.environment_id} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)} (${Math.round(s.duration)} s, position ${s.position_idx + 1} of ${s.n_performed})`));
   if (s.has_errors) {
     const ul = el('ul');

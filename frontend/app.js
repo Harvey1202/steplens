@@ -138,6 +138,11 @@ export const catKeyOf = (name) => { const i = state.meta.categories.indexOf(name
 export const catNameOf = (key) => { const i = state.meta.category_keys.indexOf(key); return i >= 0 ? state.meta.categories[i] : key; };
 export const activityName = (id) => (state.meta.activities.find((a) => String(a.activity_id) === String(id)) || {}).activity_name || `recipe ${id}`;
 export const fmtPct = (x) => (Number.isFinite(x) ? `${Math.round(x * 100)}%` : '–');
+// Step descriptions come as "<keyword>-<full text>" ("add-add 1/4 tsp salt to the pan", "Coat -Coat a 6-oz. ramekin ...").
+// stepName drops the keyword and capitalizes ("Add 1/4 tsp salt to the pan"); stepVerb keeps only the keyword ("add").
+const KEYWORD_SEP = (t) => { const i = t.indexOf('-'); return i > 0 && i <= 25 ? i : -1; };
+export const stepName = (desc) => { let t = String(desc ?? ''); const i = KEYWORD_SEP(t); if (i > 0) t = t.slice(i + 1).trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
+export const stepVerb = (desc) => { const t = String(desc ?? ''); const i = KEYWORD_SEP(t); return (i > 0 ? t.slice(0, i) : t.split(' ')[0]).trim(); };
 export const fmtTime = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 // ---------------------------------------------------------------- data
@@ -208,7 +213,13 @@ function initControls() {
   $('modelB').addEventListener('change', (e) => { state.modelB = e.target.value; update(); });
   $('phase').addEventListener('change', (e) => { state.phase = e.target.value; update(); });
   $('norm').addEventListener('change', (e) => { state.norm = e.target.checked; if (state.opRule === 'paper' && !state.norm) state.opRule = 'custom'; recomputeThresholds(); update(); });
-  $('opRule').addEventListener('change', (e) => { state.opRule = e.target.value; recomputeThresholds(); update(); });
+  $('opRule').addEventListener('change', (e) => {
+    const prev = state.opRule; state.opRule = e.target.value;
+    // the paper protocol turns normalization on; leaving it puts back the setting from before
+    if (state.opRule === 'paper' && prev !== 'paper') state.normBeforePaper = state.norm;
+    else if (prev === 'paper' && state.opRule !== 'paper') state.norm = state.normBeforePaper ?? false;
+    recomputeThresholds(); update();
+  });
   $('threshold').addEventListener('input', (e) => { state.threshold = +e.target.value; state.opRule = 'custom'; $('thresholdOut').value = state.threshold.toFixed(2); update(); });
   const bind = (id, name) => $(id).addEventListener('change', (e) => { state.filters[name] = e.target.value; update(); });
   bind('fActivity', 'activity_id'); bind('fPerson', 'person_id'); bind('fEnvironment', 'environment_id');
@@ -247,7 +258,7 @@ function renderChips() {
   const labels = {
     activity_id: (v) => `recipe: ${activityName(v)}`, person_id: (v) => `person ${v}`, environment_id: (v) => `kitchen ${v}`,
     category: (v) => `category: ${catNameOf(v)}`, duration_bucket: (v) => `duration ${v}`, position_bucket: (v) => `position ${v}`,
-    step_id: (v) => { const s = state.steps.find((x) => String(x.step_id) === String(v)); return `step: ${s ? s.step_description.split(' -')[0] : v}`; },
+    step_id: (v) => { const s = state.steps.find((x) => String(x.step_id) === String(v)); return `step: ${s ? stepName(s.step_description) : v}`; },
   };
   for (const k of Object.keys(f)) {
     if (!f[k]) continue;
@@ -292,7 +303,7 @@ function readUrlState() {
   if (q.get('color') && [...$('embedColor').options].some((o) => o.value === q.get('color'))) state.embedColor = q.get('color');
   return q.get('threshold') !== null;
 }
-function writeUrlState() {
+export function writeUrlState() {
   const q = new URLSearchParams();
   q.set('modelA', state.modelA || ''); if (state.modelB) q.set('modelB', state.modelB);
   q.set('phase', state.phase); if (state.norm) q.set('norm', '1'); q.set('rule', state.opRule);
