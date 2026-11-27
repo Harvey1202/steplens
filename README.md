@@ -133,25 +133,17 @@ Figures made by scripts (run from the repository root; they write to `docs/figur
 | `slice_survival.png` (flagged slices re-checked on test) | `python scripts/slice_survival.py` |
 | `umap_kitchen_outcome.png` (UMAP by kitchen and by outcome) | `python -m steplens.embedding --backbone omnivore` (once, needs the features), then `python scripts/embedding_figure.py` |
 
-Screenshots of the tool: start it (`uvicorn steplens.server:app --port 8781`), open the URL
+Screenshots of the tool (retaken on 2026-11-27 with the current interface): start it (`uvicorn steplens.server:app --port 8781`), open the URL
 (after `http://127.0.0.1:8781/`) in a 1500 × 1000 window at 2× pixel density, and capture the element:
 
 | Screenshot | URL | Element |
 | --- | --- | --- |
-| Overview | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light&models=all` | top 960 px |
+| Overview | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the top of the page down to the matrix card |
 | Task graph | `?modelA=omnivore_mlp_video_step_random_lr1e-4&rule=balanced&theme=light&activity_id=25` | the task graph |
 | Slice stability | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | slice table header + first 7 rows |
-| Compare strip | `?modelA=omnivore_mlp_video_step_lr1e-4&modelB=slowfast_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the compare strip |
-| Timeline | `?modelA=omnivore_transformer_video_recordings&rule=balanced&theme=light&recording=25_40&person_id=2` | the timeline card down to its legend |
-
-The paper's screenshots were taken on 2026-11-17, before these display changes: the page is one column in the order
-matrix, slices, task graph, timeline, UMAP (so *Overview* now shows the settings, scorecard and matrix, and the UMAP is at
-the bottom); the settings sit in three labelled rows (model, decision, filter) above a scorecard that leads with missed,
-false alarm and AUC; the matrix puts model A first, shows a short list of models until you click *show all*, and hatches
-cells with fewer than 5 steps instead of coloring them; the slice table uses readable names (`kitchen 2` for
-`environment_id=2`); step names drop the dataset's keyword prefix (`Add 1/4 tsp salt to the pan` for
-`add-add 1/4 tsp salt to the pan`); the timeline's score axis fits the recording instead of running 0–1, and its outcome
-row carries ✓ / ✗ / ! icons. The numbers are unchanged.
+| Compare strip | `?modelA=omnivore_mlp_video_step_lr1e-4&modelB=slowfast_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the compare strip, in a 760-px-wide window |
+| Timeline | `?modelA=omnivore_transformer_video_recordings&rule=balanced&theme=light&recording=25_40&person_id=2` | the timeline card, after clicking the step *Add 1/4 tsp salt to the pan* and pausing the video at 4:22 |
+| Embedding | `?modelA=omnivore_mlp_video_step_lr1e-4&rule=balanced&theme=light` | the embedding card |
 
 ## Run the tool
 
