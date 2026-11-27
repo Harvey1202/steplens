@@ -77,7 +77,7 @@ We report this as an observation, not as a finding.
 
 ## 2. Avoiding circular case studies: a strong notebook baseline
 
-We strengthened the notebook baseline (`docs/user_study/baseline_notebook.ipynb`): slicing
+We strengthened the notebook baseline (`docs/baseline/baseline_notebook.ipynb`): slicing
 tables with hold-out columns for every attribute and pair, plus plots of the miss rate by
 category, person, kitchen, position, duration and recipe with Wilson intervals, a
 person × kitchen heat map and score histograms. Then we asked, finding by finding, which
@@ -102,8 +102,6 @@ models, which is what exposed the instability of kitchen 2, and (b) the link fro
 number to the video, which is where the explanations came from. Neither view found the
 benchmark properties; reading the code did. The final paper will present the case studies
 with this table next to them.
-
-On outside feedback: we will not run a controlled study (IRB).
 
 ## 3. Small categories, noisy models: how often flagged slices survive
 

@@ -272,7 +272,7 @@ one. Because case studies written by the tool's authors can be chosen to fit the
 compare against a strong baseline, not only against the paper's tables: a notebook with
 slicing tables (every attribute and pair, with hold-out columns) and plots of the miss
 rate per attribute with Wilson intervals, a person × kitchen heat map and score
-histograms (`docs/user_study/baseline_notebook.ipynb`). Full walkthroughs with video
+histograms (`docs/baseline/baseline_notebook.ipynb`). Full walkthroughs with video
 links are in `docs/case_studies.md`.
 
 | Case study | View that surfaced it | What the aggregate tables could not show | Safeguard outcome |
@@ -301,8 +301,7 @@ A careful notebook finds most single-attribute rate findings. What the tool adds
 validation attached to every slice with fast switching between models, which is what
 exposed the instability of kitchen 2, and the link from a number to the video, which is
 where the explanations came from. Neither view found the properties of the benchmark
-code; reading the code did. A controlled user study would need IRB approval and is out of
-scope. Materials for a future controlled study are in `docs/user_study/`.
+code; reading the code did.
 
 ## 9. Limitations
 
@@ -312,7 +311,7 @@ to the paper (`docs/seeds.md`); our training follows the released code rather th
 paper's stated settings; one flagged slice in four reverses on new data; 360p
 features released by the authors rather than our own; no depth features; Temperature has
 nine test errors; the official step split's biases limit what can be said about
-position; the tool is evaluated by case studies rather than a controlled user study; all
+position; the case studies were written by the tool's authors; all
 numbers come from one dataset and one domain.
 
 ## 10. Conclusion
@@ -322,7 +321,7 @@ that the step split's phases differ in position within the recipe, or that one c
 hard for every model, including the authors' own. A tool that keeps steps, slices and
 video linked, insists on hold-out confirmation, and lets the analyst switch models found
 all of them in a day, and also showed which of its own findings not to trust. The next
-things to do are a controlled user study, multi-seed confidence intervals for every
+things to do are multi-seed confidence intervals for every
 model, and models with cross-step context.
 
 ## Appendix

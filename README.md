@@ -117,8 +117,8 @@ score every step with one of them and show it in the tool next to our models:
 
 Documents: `proposal/Team17.pdf` (the submitted proposal), `docs/feedback_response.md` (response to the proposal feedback, with evidence), `docs/findings.md` (findings log), `docs/case_studies.md` (walkthroughs with
 video), `docs/results.md` (all models), `docs/seeds.md` (seed robustness), `docs/report.md`
-(report draft), `docs/slides_outline.md`, `docs/user_study/` (protocol, task sheet, SUS,
-consent, reference findings, baseline notebook + CSVs; designed, not run).
+(report draft), `docs/slides_outline.md`, `docs/baseline/` (the notebook baseline used in the evaluation, with
+its CSVs).
 
 License note: the dataset is released under Apache 2.0 (website, downloader and
 error_recognition repos; the annotations README says the same, its LICENSE file is MIT).

@@ -226,6 +226,5 @@ through category-specific skills.
   head and split we trained, and the recording split is harder than the step split for
   every backbone (Omnivore transformer 67.5 vs 71.8 AUC), as the paper also reports.
 * Kitchen 2 checked on the recording split and across seeds (sections 3b, 3c): not a
-  property of the data. Case studies written (`case_studies.md`). The controlled user
-  study was dropped in favor of the case-study evaluation; its materials stay in
-  `user_study/` as an appendix.
+  property of the data. Case studies written (`case_studies.md`); the
+  evaluation compares them with a notebook baseline (`baseline/`).

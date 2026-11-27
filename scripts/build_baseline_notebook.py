@@ -1,8 +1,8 @@
-"""Build the user-study baseline notebook (pandas + metric tables, no plots) and the
+"""Build the first version of the baseline notebook (pandas + metric tables) and the
 CSV files it reads, so it runs anywhere with pandas only.
 
     python scripts/build_baseline_notebook.py
-    jupyter nbconvert --to notebook --execute --inplace docs/user_study/baseline_notebook.ipynb
+    jupyter nbconvert --to notebook --execute --inplace docs/baseline/baseline_notebook.ipynb
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-OUT = ROOT / "docs" / "user_study"
+OUT = ROOT / "docs" / "baseline"
 DATA = OUT / "data"
 MODELS = ["omnivore_mlp_video_step_lr1e-4", "slowfast_mlp_video_step_lr1e-4", "omnivore_transformer_video_step_lr1e-5",
           "omnivore_mlp_video_step_random_lr1e-4", "omnivore_transformer_video_recordings"]
@@ -45,11 +45,11 @@ This notebook gives you the same facts as StepLens, as pandas tables. Each step 
 recording is one row; the model gives each step a score; a step is flagged as an error
 when its score is above the model's threshold (chosen on the validation steps).
 
-**Your task (15 minutes):** find the model's main failure modes — groups of steps
-(error category, recipe, person, kitchen, step duration, position in the recipe, or a
-combination) where it misses more errors than overall, or raises more false alarms.
-Write each finding on the task sheet with its numbers. Run the cells top to bottom,
-then edit the slicing cells near the end as you like."""),
+**Purpose:** the baseline for StepLens' evaluation, showing what a careful analyst finds
+with slicing tables and a few plots: groups of steps (error category, recipe, person,
+kitchen, step duration, position in the recipe, or a combination) where the model misses
+more errors than overall, or raises more false alarms. Run the cells top to bottom, then
+edit the slicing cells near the end as you like."""),
         code("""import pandas as pd
 pd.set_option("display.max_rows", 200, "display.width", 160)
 

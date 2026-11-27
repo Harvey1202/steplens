@@ -32,7 +32,7 @@
     2; the safeguards are part of the tool.
 11. **Limitations.** Three seeds only for the key models; 360p features only; no depth;
     small test sets for Temperature (n = 9); the official split's biases limit position
-    claims; no controlled user study (designed, not run).
+    claims.
 12. **Take-aways.** Aggregate numbers hid an excluded category, a biased split and a
     cook the models cannot read; a linked, slice-aware tool found them in hours. Repo
     link, what to do next.
