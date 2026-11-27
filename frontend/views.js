@@ -438,6 +438,9 @@ export async function renderSlices() {
   if (f.person_id) q.append('person_id', f.person_id);
   if (f.environment_id) q.append('environment_id', f.environment_id);
   if (f.category) q.append('category', f.category);
+  if (f.duration_bucket) q.append('duration_bucket', f.duration_bucket);
+  if (f.position_bucket) q.append('position_bucket', f.position_bucket);
+  if (f.step_id) q.append('step_id', f.step_id);
   let data;
   try { data = await api.json(`/api/slices?${q}`); } catch (e) { box.replaceChildren(el('div', { class: 'empty' }, `slices failed: ${e.message}`)); box.style.opacity = ''; return; }
   box.replaceChildren();
@@ -627,7 +630,8 @@ export async function renderTimeline() {
     sel.appendChild(o);
   }
   if (!groups.length) { box.replaceChildren(el('div', { class: 'empty' }, 'No recordings match the current filters.')); $('stepDetail').replaceChildren(); $('videoBox').replaceChildren(); return; }
-  if (!groups.some((r) => r.rid === state.recording)) state.recording = groups[0].rid;
+  // the filters can leave the previous recording out; the one picked instead goes into the URL too
+  if (!groups.some((r) => r.rid === state.recording)) { state.recording = groups[0].rid; writeUrlState(); }
   sel.value = state.recording;
   const rid = state.recording, token = ++timelineToken;
   const [segs, secA, secB] = await Promise.all([api.fetchSegments(rid), api.fetchSeconds(state.modelA, rid), state.modelB ? api.fetchSeconds(state.modelB, rid) : null]);

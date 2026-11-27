@@ -8,6 +8,7 @@ discovery, and the static front end.
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -214,8 +215,19 @@ def model_threshold(model_id: str, rule: str, norm: bool, threshold: float) -> f
     return store.thresholds[key]
 
 
+def _finite(x):
+    """NaN and infinity become None (JSON null), recursively through dicts and lists."""
+    if isinstance(x, dict):
+        return {k: _finite(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_finite(v) for v in x]
+    if isinstance(x, (float, np.floating)) and not math.isfinite(float(x)):
+        return None
+    return x
+
+
 def _subset(model_id: str, phase: str, category: str | None, activity_id=None, person_id=None,
-            environment_id=None) -> pd.DataFrame:
+            environment_id=None, duration_bucket=None, position_bucket=None, step_id=None) -> pd.DataFrame:
     """One model's scored steps in a phase, restricted to the slice table's filters."""
     df = store.scored_steps(model_id, phase)
     if category:
@@ -226,6 +238,12 @@ def _subset(model_id: str, phase: str, category: str | None, activity_id=None, p
         df = df[df["person_id"].isin(person_id)]
     if environment_id:
         df = df[df["environment_id"].isin(environment_id)]
+    if duration_bucket:
+        df = df[df["duration_bucket"].astype(str).isin(duration_bucket)]
+    if position_bucket:
+        df = df[df["position_bucket"].astype(str).isin(position_bucket)]
+    if step_id:
+        df = df[df["step_id"].isin(step_id)]
     return df
 
 
@@ -269,7 +287,7 @@ def metrics(model_id: str, phase: str = "test", threshold: float = 0.5, norm: bo
     df = store.scored_steps(model_id, phase)
     pred = _pred(df, threshold, norm)
     return dict(
-        overall=binary_metrics(df["has_errors"].values, df["score_norm" if norm else "score"].values, threshold),
+        overall=_finite(binary_metrics(df["has_errors"].values, df["score_norm" if norm else "score"].values, threshold)),
         per_category=per_category(df, pred),
     )
 
@@ -279,6 +297,8 @@ def slices(model_id: str, phase: str = "test", threshold: float = 0.5, norm: boo
            min_size: int = 10, min_errors: int = 10, max_order: int = 2, categories: bool = True, limit: int = 400,
            sort: str = "z_miss", activity_id: list[int] | None = Query(None),
            person_id: list[int] | None = Query(None), environment_id: list[int] | None = Query(None),
+           duration_bucket: list[str] | None = Query(None), position_bucket: list[str] | None = Query(None),
+           step_id: list[int] | None = Query(None),
            category: str | None = None, confirm: str | None = None, rule: str = "custom", stability: bool = False):
     """Slices found on `phase`; with `confirm=<phase>` each slice is re-evaluated on that hold-out phase.
 
@@ -291,7 +311,8 @@ def slices(model_id: str, phase: str = "test", threshold: float = 0.5, norm: boo
         raise HTTPException(400, f"unknown category {category}")
     if rule not in OP_RULES:
         raise HTTPException(400, f"unknown operating-point rule {rule}")
-    filters = (category, tuple(activity_id or ()), tuple(person_id or ()), tuple(environment_id or ()))
+    filters = (category, tuple(activity_id or ()), tuple(person_id or ()), tuple(environment_id or ()),
+               tuple(duration_bucket or ()), tuple(position_bucket or ()), tuple(step_id or ()))
 
     df = _subset(model_id, phase, *filters)
     if df.empty:
@@ -323,7 +344,9 @@ def slices(model_id: str, phase: str = "test", threshold: float = 0.5, norm: boo
             if not dfc.empty:
                 tab, confirm_overall = confirm_slices(dfc, _pred(dfc, threshold, norm), tab)
     overall = binary_metrics(df["has_errors"].values, df["score_norm" if norm else "score"].values, threshold)
-    return dict(overall=overall, n_slices=int(len(tab)), confirm=confirm, confirm_overall_miss=confirm_overall,
+    # a selection with only error steps (or only normal steps) has no AUC or false-alarm rate; NaN is not valid JSON
+    overall = _finite(overall)
+    return dict(overall=overall, n_slices=int(len(tab)), confirm=confirm, confirm_overall_miss=_finite(confirm_overall),
                 stability=dict(seed_runs=runs, models=others) if stability else None,
                 slices=json.loads(tab.to_json(orient="records")))
 

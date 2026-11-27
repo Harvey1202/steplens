@@ -235,7 +235,7 @@ function initControls() {
   $('sliceCats').addEventListener('change', (e) => { state.sliceCats = e.target.checked; scheduleSlices(); });
   $('graphBack').addEventListener('click', () => { state.filters.activity_id = ''; state.filters.step_id = ''; update(); });
   $('graphTable').addEventListener('change', (e) => { state.graphTable = e.target.checked; V.renderGraph(); });
-  $('recording').addEventListener('change', (e) => { state.recording = e.target.value; state.selectedStep = null; V.renderTimeline(); });
+  $('recording').addEventListener('change', (e) => { state.recording = e.target.value; state.selectedStep = null; writeUrlState(); V.renderTimeline(); });
 }
 
 function syncControls() {
@@ -315,8 +315,29 @@ export function writeUrlState() {
   if (state.embedColor !== 'outcome') q.set('color', state.embedColor);
   const theme = document.documentElement.dataset.theme; if (theme) q.set('theme', theme);
   if (document.documentElement.classList.contains('present')) q.set('present', '1');
-  history.replaceState(null, '', `?${q}`);
+  // Each click gets its own history entry, so the browser's Back button undoes it. Changes that follow within
+  // 800 ms (dragging the threshold slider, the timeline picking a recording after a filter) join that entry.
+  const url = `?${q}`;
+  if (url === location.search) return;
+  const now = Date.now();
+  if (restoringHistory || now - lastPush < 800) history.replaceState(null, '', url);
+  else { history.pushState(null, '', url); lastPush = now; }
 }
+let lastPush = 0, restoringHistory = false;
+
+// Back / Forward: rebuild the state from the URL, starting from the defaults so that removed parameters reset.
+window.addEventListener('popstate', () => {
+  if (!state.meta) return;
+  restoringHistory = true;
+  try {
+    Object.assign(state, { modelB: '', phase: 'test', norm: false, opRule: 'balanced', recording: '', selectedStep: null,
+      matrixAll: false, embedColor: 'outcome' });
+    for (const k of Object.keys(state.filters)) state.filters[k] = '';
+    readUrlState();
+    recomputeThresholds();
+    update();
+  } finally { restoringHistory = false; }
+});
 
 export function setFilters(patch) { Object.assign(state.filters, patch); update(); }
 export function setModelA(id) { state.modelA = id; update(); }
@@ -344,7 +365,8 @@ export function update() {
     recomputeThresholds();
     $('status').textContent = `${state.meta.n_recordings} recordings · ${state.meta.n_steps} steps · ${state.models.length} model${state.models.length === 1 ? '' : 's'}`;
     if (!state.models.length) $('status').textContent += ' — no predictions yet; train a model with python -m steplens.train';
-    update();
+    restoringHistory = true;   // the first render tidies the URL in place instead of adding a history entry
+    try { update(); } finally { restoringHistory = false; }
   } catch (err) {
     $('status').textContent = `failed to load: ${err.message}`;
     console.error(err);
